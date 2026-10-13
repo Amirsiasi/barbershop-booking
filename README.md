@@ -29,6 +29,7 @@ Entstanden aus meinem Projekt [customer-crud-spring-react](https://github.com/Am
 - Zeit blockieren (Pause, Urlaub, Arzttermin) – in der Zeit kann niemand online buchen
 - Kennzahlen des Tages: Termine, erwarteter Umsatz, Stornos
 - **Anfragen:** offene WhatsApp-Anfragen mit Zähler im Menü, Bestätigen/Ablehnen, WhatsApp-Simulator mit allen Unterhaltungen
+- **Team:** Barber hinzufügen, bearbeiten und entfernen. Mit kommenden Terminen geht Entfernen nicht (erst umbuchen oder stornieren), mit alten Terminen wird der Barber nur ausgeblendet und kann wieder aktiviert werden.
 - **Leistungen & Preise:** Preise, Dauer, Namen und Beschreibungen ändern, neue Leistungen anlegen, Leistungen ausblenden. Bereits gebuchte Termine behalten ihren Preis.
 
 ![Buchung](docs/screenshots/booking.png)
@@ -141,6 +142,8 @@ Bei jedem Push auf GitHub laufen über **GitHub Actions** ([`.github/workflows/c
 | POST / DELETE | `/api/admin/absences` | Zeit blockieren / freigeben (Login) |
 | GET / POST | `/api/admin/services` | Preisliste inkl. ausgeblendeter Leistungen / neue Leistung (Login) |
 | PUT | `/api/admin/services/{id}` | Preis, Dauer, Name ändern oder ausblenden (Login) |
+| GET / POST | `/api/admin/barbers` | Team inkl. Ehemalige / Barber hinzufügen (Login) |
+| PUT / DELETE | `/api/admin/barbers/{id}` | Barber bearbeiten / entfernen (Login) |
 | GET | `/api/admin/requests` | Offene Anfragen (Login) |
 | POST | `/api/admin/appointments/{id}/confirm` · `/reject` | Anfrage bestätigen / ablehnen, Kunde wird benachrichtigt (Login) |
 | POST | `/api/admin/chat/simulate` | Chat-Nachricht wie von WhatsApp verarbeiten (Login) |

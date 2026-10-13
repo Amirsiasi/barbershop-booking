@@ -407,4 +407,72 @@ class BookingIntegrationTest {
         assertThat(say("0664 1000005", "morgen")).contains("Um wie viel Uhr");
         assertThat(say("0664 1000005", "abbrechen")).contains("abgebrochen");
     }
+
+    // ---- team management -----------------------------------------------------------------------
+
+    long createBarber(String name) throws Exception {
+        String created = mvc.perform(post("/api/admin/barbers").with(httpBasic("admin", "test-secret"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "%s", "bio": "Neu im Team", "active": true}
+                                """.formatted(name)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return json.readTree(created).get("id").asLong();
+    }
+
+    @Test
+    void a_new_barber_without_appointments_is_bookable_and_can_be_deleted() throws Exception {
+        long id = createBarber("Karim");
+        try {
+            mvc.perform(get("/api/shops/mr-artist"))
+                    .andExpect(jsonPath("$.barbers[?(@.name == 'Karim')]").isNotEmpty());
+            assertThat(freeStarts(id)).contains(vienna(10, 0).toString());
+
+            mvc.perform(delete("/api/admin/barbers/" + id).with(httpBasic("admin", "test-secret")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.result").value("DELETED"));
+
+            assertThat(jdbc.queryForObject("select count(*) from barber where id = ?", Integer.class, id)).isZero();
+        } finally {
+            jdbc.update("update barber set active = false where id = ?", id);
+        }
+    }
+
+    @Test
+    void a_barber_with_upcoming_appointments_cannot_be_removed_and_with_history_is_only_hidden() throws Exception {
+        long id = createBarber("Yusuf");
+        try {
+            String booked = mvc.perform(post("/api/shops/mr-artist/appointments").contentType(MediaType.APPLICATION_JSON)
+                            .content(json.writeValueAsString(request(id, vienna(10, 0), "0660 8000001"))))
+                    .andExpect(status().isCreated())
+                    .andReturn().getResponse().getContentAsString();
+
+            mvc.perform(delete("/api/admin/barbers/" + id).with(httpBasic("admin", "test-secret")))
+                    .andExpect(status().isUnprocessableEntity())
+                    .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("1 kommenden Termin")));
+
+            mvc.perform(post("/api/appointments/" + json.readTree(booked).get("manageToken").asText() + "/cancel"))
+                    .andExpect(status().isOk());
+
+            mvc.perform(delete("/api/admin/barbers/" + id).with(httpBasic("admin", "test-secret")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.result").value("DEACTIVATED"));
+
+            mvc.perform(get("/api/shops/mr-artist"))
+                    .andExpect(jsonPath("$.barbers[?(@.name == 'Yusuf')]").isEmpty());
+            mvc.perform(get("/api/admin/barbers").with(httpBasic("admin", "test-secret")))
+                    .andExpect(jsonPath("$[?(@.name == 'Yusuf')].active").value(false));
+        } finally {
+            jdbc.update("update barber set active = false where id = ?", id);
+        }
+    }
+
+    @Test
+    void two_active_barbers_cannot_have_the_same_name() throws Exception {
+        mvc.perform(post("/api/admin/barbers").with(httpBasic("admin", "test-secret"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\": \"reza\", \"active\": true}"))
+                .andExpect(status().isConflict());
+    }
 }

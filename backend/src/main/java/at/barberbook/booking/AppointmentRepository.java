@@ -39,6 +39,17 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
                                   @Param("from") Instant from,
                                   @Param("to") Instant to);
 
+    /** Requested or confirmed appointments of a barber that have not started yet. */
+    @Query("""
+            select count(a) from Appointment a
+            where a.barber.id = :barberId and a.startsAt > :now
+              and a.status in (at.barberbook.booking.AppointmentStatus.PENDING,
+                               at.barberbook.booking.AppointmentStatus.CONFIRMED)""")
+    long countUpcoming(@Param("barberId") Long barberId, @Param("now") Instant now);
+
+    /** Any appointment ever, in any status - decides between deleting and hiding a barber. */
+    boolean existsByBarberId(Long barberId);
+
     /** Open requests of a shop, oldest first - the barber's to-do list. */
     @Query("""
             select a from Appointment a

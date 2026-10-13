@@ -24,6 +24,18 @@ public class Barber {
         this.name = name;
     }
 
+    public void update(String name, String bio, boolean active, int sortOrder) {
+        this.name = name;
+        this.bio = bio;
+        this.active = active;
+        this.sortOrder = sortOrder;
+    }
+
+    /** Hidden from customers and the calendar, but kept so past appointments still show who did them. */
+    public void deactivate() {
+        this.active = false;
+    }
+
     public Long getId() { return id; }
     public Long getShopId() { return shopId; }
     public String getName() { return name; }

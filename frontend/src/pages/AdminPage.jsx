@@ -3,6 +3,7 @@ import { api } from '../lib/api.js'
 import { addDays, euro, hhmm, instantFor, isoWeekday, longDate, minutesIn, timeIn, todayIn } from '../lib/time.js'
 import AdminServices from './AdminServices.jsx'
 import AdminRequests from './AdminRequests.jsx'
+import AdminTeam from './AdminTeam.jsx'
 import Panel from '../components/Panel.jsx'
 
 const STORAGE_KEY = 'barberbook.admin'
@@ -24,13 +25,14 @@ export default function AdminPage({ shop }) {
   const logout = () => { writeAuth(null); setAuth(null); setMe(null) }
 
   if (!auth || !me) return <Login onLogin={(a, m) => { writeAuth(a); setAuth(a); setMe(m) }} />
-  return <AdminShell auth={auth} me={me} shop={shop} onLogout={logout} />
+  const refreshMe = () => api.admin.me(auth).then(setMe).catch(() => {})
+  return <AdminShell auth={auth} me={me} shop={shop} onLogout={logout} onTeamChange={refreshMe} />
 }
 
-const TABS = [['kalender', 'Kalender'], ['anfragen', 'Anfragen'], ['leistungen', 'Leistungen & Preise']]
+const TABS = [['kalender', 'Kalender'], ['anfragen', 'Anfragen'], ['team', 'Team'], ['leistungen', 'Leistungen & Preise']]
 
 /** Top bar with the shop name, the admin areas (with a counter for open requests) and logout. */
-function AdminShell({ auth, me, shop, onLogout }) {
+function AdminShell({ auth, me, shop, onLogout, onTeamChange }) {
   const [tab, setTab] = useState(() => TABS.find(([id]) => `#${id}` === window.location.hash)?.[0] || 'kalender')
   const [openRequests, setOpenRequests] = useState(0)
   const open = (t) => { setTab(t); window.history.replaceState(null, '', t === 'kalender' ? '#' : `#${t}`) }
@@ -61,6 +63,7 @@ function AdminShell({ auth, me, shop, onLogout }) {
       </div>
       {tab === 'kalender' && <Dashboard auth={auth} me={me} shop={shop} />}
       {tab === 'anfragen' && <AdminRequests auth={auth} tz={me.timeZone} onChange={setOpenRequests} />}
+      {tab === 'team' && <AdminTeam auth={auth} onChange={onTeamChange} />}
       {tab === 'leistungen' && <AdminServices auth={auth} />}
     </div>
   )
