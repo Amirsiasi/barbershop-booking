@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import { api } from './lib/api.js'
 import BookingPage from './pages/BookingPage.jsx'
+import BookingFlow from './pages/BookingFlow.jsx'
 import ManagePage from './pages/ManagePage.jsx'
 import AdminPage from './pages/AdminPage.jsx'
 import LegalPage from './pages/LegalPage.jsx'
@@ -34,6 +35,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<BookingPage shop={shop} />} />
+      <Route path="/buchen" element={<BookingFlow shop={shop} />} />
       <Route path="/termin/:token" element={<ManagePage shop={shop} />} />
       <Route path="/admin" element={<AdminPage shop={shop} />} />
       <Route path="/impressum" element={<LegalPage shop={shop} title="Impressum" />} />

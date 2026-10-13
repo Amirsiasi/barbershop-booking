@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api.js'
 import { addDays, euro, hhmm, instantFor, isoWeekday, longDate, minutesIn, timeIn, todayIn } from '../lib/time.js'
 import AdminServices from './AdminServices.jsx'
+import AdminShop from './AdminShop.jsx'
 import AdminRequests from './AdminRequests.jsx'
 import AdminTeam from './AdminTeam.jsx'
 import Panel from '../components/Panel.jsx'
@@ -51,7 +52,7 @@ export default function AdminPage({ shop }) {
                      onPasswordChanged={(pw) => applyAuth(basicAuth(me.username, pw), me)} />
 }
 
-const ALL_TABS = [['kalender', 'Kalender'], ['anfragen', 'Anfragen'], ['team', 'Team'], ['leistungen', 'Leistungen & Preise']]
+const ALL_TABS = [['kalender', 'Kalender'], ['anfragen', 'Anfragen'], ['team', 'Team'], ['leistungen', 'Leistungen & Preise'], ['shop', 'Shop-Auftritt']]
 const BARBER_TABS = ['kalender', 'anfragen']
 const ROLE_LABEL = { OWNER: 'Inhaber', BARBER: 'Barber' }
 
@@ -96,6 +97,7 @@ function AdminShell({ auth, me, shop, onLogout, onTeamChange, onPasswordChanged 
       {tab === 'anfragen' && <AdminRequests auth={auth} tz={me.timeZone} onChange={setOpenRequests} isOwner={isOwner} />}
       {tab === 'team' && isOwner && <AdminTeam auth={auth} me={me} onChange={onTeamChange} />}
       {tab === 'leistungen' && isOwner && <AdminServices auth={auth} />}
+      {tab === 'shop' && isOwner && <AdminShop auth={auth} shop={shop} />}
 
       {account && (
         <Panel title="Mein Konto" onClose={() => setAccount(false)}>
