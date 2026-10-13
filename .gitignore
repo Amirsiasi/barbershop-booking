@@ -1,0 +1,15 @@
+# secrets
+.env
+
+# backend
+backend/target/
+*.iml
+.idea/
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+
+# os / editors
+.DS_Store
+.vscode/
