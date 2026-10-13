@@ -13,6 +13,8 @@ const STATUS_LABEL = { PENDING: 'Anfrage, unbestätigt', CONFIRMED: 'Bestätigt'
 const readAuth = () => { try { return sessionStorage.getItem(STORAGE_KEY) } catch { return null } }
 const writeAuth = (v) => { try { v ? sessionStorage.setItem(STORAGE_KEY, v) : sessionStorage.removeItem(STORAGE_KEY) } catch { /* private mode */ } }
 
+const basicAuth = (username, password) => btoa(unescape(encodeURIComponent(`${username}:${password}`)))
+
 export default function AdminPage({ shop }) {
   const [auth, setAuth] = useState(readAuth)
   const [me, setMe] = useState(null)
@@ -23,18 +25,43 @@ export default function AdminPage({ shop }) {
   }, [auth])
 
   const logout = () => { writeAuth(null); setAuth(null); setMe(null) }
+  const applyAuth = (a, m) => { writeAuth(a); setAuth(a); setMe(m) }
 
-  if (!auth || !me) return <Login onLogin={(a, m) => { writeAuth(a); setAuth(a); setMe(m) }} />
+  if (!auth || !me) return <Login onLogin={applyAuth} />
+
+  // start password from the owner: the user must choose an own one before anything else
+  if (me.mustChangePassword) {
+    return (
+      <div className="admin page-center">
+        <div className="login">
+          <h1>Willkommen, {me.barberName || me.username}</h1>
+          <p className="section-sub">Bitte lege jetzt ein eigenes Passwort fest. Das Startpasswort gilt danach nicht mehr.</p>
+          <PasswordForm auth={auth} onDone={(newPassword) => {
+            const a = basicAuth(me.username, newPassword)
+            api.admin.me(a).then((m) => applyAuth(a, m))
+          }} />
+          <button className="link-btn" style={{ marginTop: 16 }} onClick={logout}>Abmelden</button>
+        </div>
+      </div>
+    )
+  }
+
   const refreshMe = () => api.admin.me(auth).then(setMe).catch(() => {})
-  return <AdminShell auth={auth} me={me} shop={shop} onLogout={logout} onTeamChange={refreshMe} />
+  return <AdminShell auth={auth} me={me} shop={shop} onLogout={logout} onTeamChange={refreshMe}
+                     onPasswordChanged={(pw) => applyAuth(basicAuth(me.username, pw), me)} />
 }
 
-const TABS = [['kalender', 'Kalender'], ['anfragen', 'Anfragen'], ['team', 'Team'], ['leistungen', 'Leistungen & Preise']]
+const ALL_TABS = [['kalender', 'Kalender'], ['anfragen', 'Anfragen'], ['team', 'Team'], ['leistungen', 'Leistungen & Preise']]
+const BARBER_TABS = ['kalender', 'anfragen']
+const ROLE_LABEL = { OWNER: 'Inhaber', BARBER: 'Barber' }
 
-/** Top bar with the shop name, the admin areas (with a counter for open requests) and logout. */
-function AdminShell({ auth, me, shop, onLogout, onTeamChange }) {
-  const [tab, setTab] = useState(() => TABS.find(([id]) => `#${id}` === window.location.hash)?.[0] || 'kalender')
+/** Top bar with the shop name, the admin areas allowed for this role, the account and logout. */
+function AdminShell({ auth, me, shop, onLogout, onTeamChange, onPasswordChanged }) {
+  const isOwner = me.role === 'OWNER'
+  const tabs = isOwner ? ALL_TABS : ALL_TABS.filter(([id]) => BARBER_TABS.includes(id))
+  const [tab, setTab] = useState(() => tabs.find(([id]) => `#${id}` === window.location.hash)?.[0] || 'kalender')
   const [openRequests, setOpenRequests] = useState(0)
+  const [account, setAccount] = useState(false)
   const open = (t) => { setTab(t); window.history.replaceState(null, '', t === 'kalender' ? '#' : `#${t}`) }
 
   // keep the counter fresh on every tab, so a new WhatsApp request is noticed
@@ -51,21 +78,89 @@ function AdminShell({ auth, me, shop, onLogout, onTeamChange }) {
         <div className="wrap">
           <strong>{me.shopName}</strong>
           <nav className="admin-tabs" aria-label="Bereiche">
-            {TABS.map(([id, label]) => (
+            {tabs.map(([id, label]) => (
               <button key={id} className="admin-tab" aria-current={tab === id ? 'page' : undefined} onClick={() => open(id)}>
                 {label}
                 {id === 'anfragen' && openRequests > 0 && <span className="tab-count" aria-label={`${openRequests} offen`}>{openRequests}</span>}
               </button>
             ))}
           </nav>
+          <button className="account-btn" onClick={() => setAccount(true)}>
+            {me.barberName || me.username}
+            <span>{ROLE_LABEL[me.role]}</span>
+          </button>
           <button className="link-btn" onClick={onLogout}>Abmelden</button>
         </div>
       </div>
       {tab === 'kalender' && <Dashboard auth={auth} me={me} shop={shop} />}
-      {tab === 'anfragen' && <AdminRequests auth={auth} tz={me.timeZone} onChange={setOpenRequests} />}
-      {tab === 'team' && <AdminTeam auth={auth} onChange={onTeamChange} />}
-      {tab === 'leistungen' && <AdminServices auth={auth} />}
+      {tab === 'anfragen' && <AdminRequests auth={auth} tz={me.timeZone} onChange={setOpenRequests} isOwner={isOwner} />}
+      {tab === 'team' && isOwner && <AdminTeam auth={auth} me={me} onChange={onTeamChange} />}
+      {tab === 'leistungen' && isOwner && <AdminServices auth={auth} />}
+
+      {account && (
+        <Panel title="Mein Konto" onClose={() => setAccount(false)}>
+          <dl>
+            <dt>Benutzer</dt><dd>{me.username}</dd>
+            <dt>Rolle</dt><dd>{ROLE_LABEL[me.role]}</dd>
+            {me.barberName && <><dt>Barber</dt><dd>{me.barberName}</dd></>}
+          </dl>
+          {me.emergencyLogin ? (
+            <p className="alert alert--info">
+              Das ist der Notfall-Zugang aus der Server-Einstellung. Sein Passwort wird in der <code>.env</code> geändert.
+              Für den Alltag lieber im Tab Team einen persönlichen Login anlegen.
+            </p>
+          ) : (
+            <>
+              <h3 style={{ margin: '8px 0 12px' }}>Passwort ändern</h3>
+              <PasswordForm auth={auth} onDone={(pw) => { onPasswordChanged(pw); setAccount(false) }} />
+            </>
+          )}
+        </Panel>
+      )}
     </div>
+  )
+}
+
+function PasswordForm({ auth, onDone }) {
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [repeat, setRepeat] = useState('')
+  const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setError(null)
+    if (next.length < 8) return setError('Das neue Passwort braucht mindestens 8 Zeichen.')
+    if (next !== repeat) return setError('Die beiden neuen Passwörter stimmen nicht überein.')
+    setBusy(true)
+    try {
+      await api.admin.changePassword(auth, current, next)
+      onDone(next)
+    } catch (err) {
+      setError(Object.values(err.fieldErrors || {})[0] || err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form className="form" onSubmit={submit}>
+      {error && <p className="alert" role="alert">{error}</p>}
+      <div className="field">
+        <label htmlFor="pw-current">Aktuelles Passwort</label>
+        <input id="pw-current" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" required />
+      </div>
+      <div className="field">
+        <label htmlFor="pw-new">Neues Passwort <em>(mind. 8 Zeichen)</em></label>
+        <input id="pw-new" type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" required />
+      </div>
+      <div className="field">
+        <label htmlFor="pw-repeat">Neues Passwort wiederholen</label>
+        <input id="pw-repeat" type="password" value={repeat} onChange={(e) => setRepeat(e.target.value)} autoComplete="new-password" required />
+      </div>
+      <button className="btn btn--block" disabled={busy}>{busy ? 'Speichert …' : 'Passwort speichern'}</button>
+    </form>
   )
 }
 
@@ -78,7 +173,7 @@ function Login({ onLogin }) {
   const submit = async (e) => {
     e.preventDefault()
     setBusy(true); setError(null)
-    const auth = btoa(unescape(encodeURIComponent(`${username}:${password}`)))
+    const auth = basicAuth(username, password)
     try {
       onLogin(auth, await api.admin.me(auth))
     } catch (err) {
@@ -111,6 +206,7 @@ function Login({ onLogin }) {
 }
 
 function Dashboard({ auth, me, shop }) {
+  const mayActFor = (barberId) => me.role === 'OWNER' || me.barberId === barberId
   const tz = me.timeZone
   const [date, setDate] = useState(() => todayIn(tz))
   const [day, setDay] = useState(null)
@@ -165,8 +261,10 @@ function Dashboard({ auth, me, shop }) {
         {error && <p className="alert" role="alert">{error}</p>}
 
         <div className="stats">
-          <div className="stat"><strong>{active.length}</strong><span>Termine</span></div>
-          <div className="stat"><strong>{euro(revenue)}</strong><span>Umsatz erwartet</span></div>
+          <div className="stat"><strong>{active.length}</strong><span>Termine im Shop</span></div>
+          {me.role === 'OWNER'
+            ? <div className="stat"><strong>{euro(revenue)}</strong><span>Umsatz erwartet</span></div>
+            : <div className="stat"><strong>{active.filter((a) => a.barberId === me.barberId).length}</strong><span>Davon meine</span></div>}
           <div className="stat"><strong>{day?.appointments.filter((a) => a.status === 'CANCELLED').length ?? 0}</strong><span>Storniert</span></div>
         </div>
 
@@ -176,7 +274,11 @@ function Dashboard({ auth, me, shop }) {
           <div className="calendar" style={{ '--cols': me.barbers.length, '--hour': `${HOUR_PX}px` }}>
             <div className="cal-head">
               <div />
-              {me.barbers.map((b) => <div key={b.id}>{b.name}</div>)}
+              {me.barbers.map((b) => (
+                <div key={b.id} className={b.id === me.barberId ? 'cal-head__me' : undefined}>
+                  {b.name}{b.id === me.barberId && <span> (du)</span>}
+                </div>
+              ))}
             </div>
             <div className="cal-body" style={{ height: px(endMin) + 8 }}>
               <div className="cal-times">
@@ -193,7 +295,9 @@ function Dashboard({ auth, me, shop }) {
                     return (
                       <div key={`abs-${x.id}`} className="block" style={{ top, height: Math.max(24, bottom - top) }}>
                         {x.reason || 'Blockiert'}{' '}
-                        <button className="link-btn" onClick={async () => { await api.admin.unblock(auth, x.id); load() }}>entfernen</button>
+                        {mayActFor(x.barberId) && (
+                          <button className="link-btn" onClick={async () => { await api.admin.unblock(auth, x.id); load() }}>entfernen</button>
+                        )}
                       </div>
                     )
                   })}
@@ -215,7 +319,8 @@ function Dashboard({ auth, me, shop }) {
         )}
       </main>
 
-      {selected && <AppointmentPanel appt={selected} tz={tz} onClose={() => setSelected(null)} onStatus={setStatus} />}
+      {selected && <AppointmentPanel appt={selected} tz={tz} canAct={mayActFor(selected.barberId)}
+                                     onClose={() => setSelected(null)} onStatus={setStatus} />}
       {blocking && (
         <BlockPanel me={me} date={date} tz={tz} onClose={() => setBlocking(false)}
                     onSave={async (payload) => { await api.admin.block(auth, payload); setBlocking(false); load() }} />
@@ -226,7 +331,7 @@ function Dashboard({ auth, me, shop }) {
 
 const minutesOf = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5))
 
-function AppointmentPanel({ appt, tz, onClose, onStatus }) {
+function AppointmentPanel({ appt, tz, canAct, onClose, onStatus }) {
   const past = new Date(appt.start) < new Date()
   return (
     <Panel title={appt.customerName} onClose={onClose}>
@@ -242,13 +347,16 @@ function AppointmentPanel({ appt, tz, onClose, onStatus }) {
         {appt.source === 'WHATSAPP' && <><dt>Über</dt><dd>WhatsApp</dd></>}
         {appt.status === 'PENDING' && appt.pendingUntil && <><dt>Reserviert bis</dt><dd>{timeIn(appt.pendingUntil, tz)} Uhr</dd></>}
       </dl>
-      {appt.status === 'PENDING' && (
+      {!canAct && (
+        <p className="alert alert--info">Das ist ein Termin von {appt.barberName}. Ändern können ihn nur {appt.barberName} oder der Inhaber.</p>
+      )}
+      {canAct && appt.status === 'PENDING' && (
         <div className="panel__actions">
           <button className="btn" onClick={() => onStatus(appt, 'CONFIRMED')}>Anfrage bestätigen</button>
           <button className="btn btn--ghost" onClick={() => onStatus(appt, 'CANCELLED')}>Ablehnen</button>
         </div>
       )}
-      {appt.status !== 'CANCELLED' && appt.status !== 'PENDING' && (
+      {canAct && appt.status !== 'CANCELLED' && appt.status !== 'PENDING' && (
         <div className="panel__actions">
           {appt.status !== 'COMPLETED' && <button className="btn" onClick={() => onStatus(appt, 'COMPLETED')}>Ist erschienen</button>}
           {past && appt.status !== 'NO_SHOW' && <button className="btn btn--ghost" onClick={() => onStatus(appt, 'NO_SHOW')}>Nicht erschienen</button>}
@@ -260,7 +368,8 @@ function AppointmentPanel({ appt, tz, onClose, onStatus }) {
 }
 
 function BlockPanel({ me, date, tz, onClose, onSave }) {
-  const [barberId, setBarberId] = useState(me.barbers[0]?.id)
+  const choices = me.role === 'OWNER' ? me.barbers : me.barbers.filter((b) => b.id === me.barberId)
+  const [barberId, setBarberId] = useState(me.barberId && choices.some((b) => b.id === me.barberId) ? me.barberId : choices[0]?.id)
   const [from, setFrom] = useState('13:00')
   const [to, setTo] = useState('14:00')
   const [reason, setReason] = useState('Mittagspause')
@@ -284,7 +393,7 @@ function BlockPanel({ me, date, tz, onClose, onSave }) {
         <div className="field">
           <label htmlFor="b">Barber</label>
           <select id="b" value={barberId} onChange={(e) => setBarberId(e.target.value)}>
-            {me.barbers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {choices.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </div>
         <div className="form__row">

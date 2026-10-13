@@ -1,5 +1,7 @@
 package at.barberbook.admin;
 
+import at.barberbook.staff.CurrentStaff;
+import at.barberbook.staff.StaffUserRepository;
 import at.barberbook.booking.AppointmentRepository;
 import at.barberbook.chat.ChatSessionRepository;
 import at.barberbook.common.Exceptions.BusinessRuleException;
@@ -44,21 +46,21 @@ public class AdminBarbersController {
     public record RemovalResult(String result, String message) {
     }
 
-    private final AdminProperties props;
-    private final ShopRepository shops;
+    private final CurrentStaff current;
     private final BarberRepository barbers;
     private final AppointmentRepository appointments;
     private final ChatSessionRepository chatSessions;
+    private final StaffUserRepository staffUsers;
     private final Clock clock;
 
-    public AdminBarbersController(AdminProperties props, ShopRepository shops, BarberRepository barbers,
+    public AdminBarbersController(CurrentStaff current, BarberRepository barbers,
                                   AppointmentRepository appointments,
-                                  ChatSessionRepository chatSessions, Clock clock) {
-        this.props = props;
-        this.shops = shops;
+                                  ChatSessionRepository chatSessions, StaffUserRepository staffUsers, Clock clock) {
+        this.current = current;
         this.barbers = barbers;
         this.appointments = appointments;
         this.chatSessions = chatSessions;
+        this.staffUsers = staffUsers;
         this.clock = clock;
     }
 
@@ -88,7 +90,10 @@ public class AdminBarbersController {
         Barber b = barber(id);
         String name = form.name().trim();
         requireUniqueName(shop(), name, id);
-        if (b.isActive() && !form.active()) requireNoUpcoming(b);
+        if (b.isActive() && !form.active()) {
+            requireNoUpcoming(b);
+            disableLogin(b);
+        }
         b.update(name, blankToNull(form.bio()), form.active(), form.sortOrder() != null ? form.sortOrder() : b.getSortOrder());
         return toView(b);
     }
@@ -98,6 +103,7 @@ public class AdminBarbersController {
     public RemovalResult remove(@PathVariable Long id) {
         Barber b = barber(id);
         requireNoUpcoming(b);
+        disableLogin(b);
         if (appointments.existsByBarberId(id)) {
             b.deactivate();
             return new RemovalResult("DEACTIVATED", b.getName() + " wurde entfernt. Alte Termine bleiben in der Historie erhalten.");
@@ -109,6 +115,11 @@ public class AdminBarbersController {
     }
 
     // ---- rules ---------------------------------------------------------------------------------
+
+    /** Someone who left the team must not be able to log in any more. */
+    private void disableLogin(Barber b) {
+        staffUsers.findByBarberId(b.getId()).ifPresent(u -> u.setActive(false));
+    }
 
     private void requireNoUpcoming(Barber b) {
         long upcoming = appointments.countUpcoming(b.getId(), clock.instant());
@@ -133,7 +144,7 @@ public class AdminBarbersController {
     }
 
     private Shop shop() {
-        return shops.findBySlug(props.shopSlug()).orElseThrow(() -> new NotFoundException("Shop nicht gefunden."));
+        return current.shop();
     }
 
     private AdminBarberView toView(Barber b) {

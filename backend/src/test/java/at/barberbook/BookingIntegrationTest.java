@@ -95,7 +95,7 @@ class BookingIntegrationTest {
 
     @BeforeEach
     void cleanAndLookup() {
-        jdbc.execute("TRUNCATE appointment, customer, barber_absence, chat_message, chat_session RESTART IDENTITY CASCADE");
+        jdbc.execute("TRUNCATE appointment, customer, barber_absence, chat_message, chat_session, staff_user RESTART IDENTITY CASCADE");
         reza = jdbc.queryForObject("select id from barber where name = 'Reza'", Long.class);
         sami = jdbc.queryForObject("select id from barber where name = 'Sami'", Long.class);
         haircut = jdbc.queryForObject("select id from service_offering where name = 'Schneiden & Föhnen'", Long.class);
@@ -474,5 +474,135 @@ class BookingIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\": \"reza\", \"active\": true}"))
                 .andExpect(status().isConflict());
+    }
+
+    // ---- personal logins and roles -------------------------------------------------------------
+
+    long createLogin(long barberId, String username, String password, String role, boolean passwordAlreadyChanged) throws Exception {
+        String created = mvc.perform(post("/api/admin/staff").with(httpBasic("admin", "test-secret"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"barberId": %d, "username": "%s", "password": "%s", "role": "%s"}
+                                """.formatted(barberId, username, password, role)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        long id = json.readTree(created).get("id").asLong();
+        if (passwordAlreadyChanged) jdbc.update("update staff_user set must_change_password = false where id = ?", id);
+        return id;
+    }
+
+    long bookOnline(long barberId, int hour, String phone) throws Exception {
+        String res = mvc.perform(post("/api/shops/mr-artist/appointments").contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(request(barberId, vienna(hour, 0), phone))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return json.readTree(res).get("id").asLong();
+    }
+
+    @Test
+    void a_new_login_must_choose_an_own_password_first() throws Exception {
+        createLogin(sami, "Sami.K", "start1234", "BARBER", false);
+
+        mvc.perform(get("/api/admin/me").with(httpBasic("sami.k", "start1234")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("BARBER"))
+                .andExpect(jsonPath("$.barberName").value("Sami"))
+                .andExpect(jsonPath("$.mustChangePassword").value(true));
+
+        mvc.perform(get("/api/admin/day").param("date", MONDAY.toString()).with(httpBasic("sami.k", "start1234")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("eigenes Passwort")));
+
+        mvc.perform(post("/api/admin/me/password").with(httpBasic("sami.k", "start1234"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\": \"falsch\", \"newPassword\": \"neu-geheim-1\"}"))
+                .andExpect(status().isUnprocessableEntity());
+
+        mvc.perform(post("/api/admin/me/password").with(httpBasic("sami.k", "start1234"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\": \"start1234\", \"newPassword\": \"neu-geheim-1\"}"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get("/api/admin/day").param("date", MONDAY.toString()).with(httpBasic("sami.k", "start1234")))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/admin/day").param("date", MONDAY.toString()).with(httpBasic("sami.k", "neu-geheim-1")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void a_barber_sees_the_whole_calendar_but_changes_only_his_own_things() throws Exception {
+        createLogin(sami, "sami", "start1234", "BARBER", true);
+        long rezasAppointment = bookOnline(reza, 10, "0660 9000001");
+        long samisAppointment = bookOnline(sami, 11, "0660 9000002");
+
+        mvc.perform(get("/api/admin/day").param("date", MONDAY.toString()).with(httpBasic("sami", "start1234")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.appointments.length()").value(2));
+
+        mvc.perform(patch("/api/admin/appointments/" + rezasAppointment).with(httpBasic("sami", "start1234"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\": \"COMPLETED\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(patch("/api/admin/appointments/" + samisAppointment).with(httpBasic("sami", "start1234"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\": \"COMPLETED\"}"))
+                .andExpect(status().isOk());
+
+        String absence = "{\"barberId\": %d, \"start\": \"%s\", \"end\": \"%s\", \"reason\": \"Pause\"}";
+        mvc.perform(post("/api/admin/absences").with(httpBasic("sami", "start1234")).contentType(MediaType.APPLICATION_JSON)
+                        .content(absence.formatted(reza, vienna(13, 0), vienna(14, 0))))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/admin/absences").with(httpBasic("sami", "start1234")).contentType(MediaType.APPLICATION_JSON)
+                        .content(absence.formatted(sami, vienna(13, 0), vienna(14, 0))))
+                .andExpect(status().isCreated());
+
+        // owner-only areas
+        mvc.perform(get("/api/admin/services").with(httpBasic("sami", "start1234"))).andExpect(status().isForbidden());
+        mvc.perform(get("/api/admin/staff").with(httpBasic("sami", "start1234"))).andExpect(status().isForbidden());
+        mvc.perform(get("/api/admin/chat/conversations").with(httpBasic("sami", "start1234"))).andExpect(status().isForbidden());
+        mvc.perform(post("/api/admin/barbers").with(httpBasic("sami", "start1234"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\": \"X\", \"active\": true}"))
+                .andExpect(status().isForbidden());
+
+        // a WhatsApp request for Reza is not Sami's to decide
+        say("0664 2000001", "Ali 15:00 07.01 bei Reza Schneiden & Föhnen");
+        Long request = jdbc.queryForObject("select id from appointment where status = 'PENDING'", Long.class);
+        mvc.perform(get("/api/admin/requests").with(httpBasic("sami", "start1234")))
+                .andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(post("/api/admin/appointments/" + request + "/confirm").with(httpBasic("sami", "start1234")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void removing_a_barber_locks_his_login() throws Exception {
+        long leon = createBarber("Leon");
+        try {
+            createLogin(leon, "leon", "start1234", "BARBER", true);
+            mvc.perform(get("/api/admin/me").with(httpBasic("leon", "start1234"))).andExpect(status().isOk());
+
+            mvc.perform(delete("/api/admin/barbers/" + leon).with(httpBasic("admin", "test-secret")))
+                    .andExpect(status().isOk());
+
+            mvc.perform(get("/api/admin/me").with(httpBasic("leon", "start1234"))).andExpect(status().isUnauthorized());
+        } finally {
+            jdbc.update("update barber set active = false where id = ?", leon);
+        }
+    }
+
+    @Test
+    void usernames_are_unique_and_an_owner_cannot_lock_himself_out() throws Exception {
+        long rezasLogin = createLogin(reza, "reza", "start1234", "OWNER", true);
+
+        mvc.perform(post("/api/admin/staff").with(httpBasic("admin", "test-secret")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"barberId\": %d, \"username\": \"REZA\", \"password\": \"start1234\", \"role\": \"BARBER\"}".formatted(sami)))
+                .andExpect(status().isConflict());
+        mvc.perform(post("/api/admin/staff").with(httpBasic("admin", "test-secret")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"barberId\": %d, \"username\": \"admin\", \"password\": \"start1234\", \"role\": \"BARBER\"}".formatted(sami)))
+                .andExpect(status().isConflict());
+
+        // Reza as owner may manage the team ...
+        mvc.perform(get("/api/admin/staff").with(httpBasic("reza", "start1234"))).andExpect(status().isOk());
+        // ... but not demote himself
+        mvc.perform(put("/api/admin/staff/" + rezasLogin).with(httpBasic("reza", "start1234"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"role\": \"BARBER\", \"active\": true}"))
+                .andExpect(status().isUnprocessableEntity());
     }
 }

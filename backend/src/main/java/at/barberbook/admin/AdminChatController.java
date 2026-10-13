@@ -1,11 +1,11 @@
 package at.barberbook.admin;
 
+import at.barberbook.staff.CurrentStaff;
 import at.barberbook.chat.ChatBookingService;
 import at.barberbook.chat.ChatBookingService.ChatMessageView;
 import at.barberbook.chat.ChatBookingService.ConversationView;
 import at.barberbook.common.Exceptions.NotFoundException;
 import at.barberbook.shop.Shop;
-import at.barberbook.shop.ShopRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -30,13 +30,11 @@ public class AdminChatController {
             @NotBlank(message = "Nachricht fehlt.") @Size(max = 1000) String text) {
     }
 
-    private final AdminProperties props;
-    private final ShopRepository shops;
+    private final CurrentStaff current;
     private final ChatBookingService chat;
 
-    public AdminChatController(AdminProperties props, ShopRepository shops, ChatBookingService chat) {
-        this.props = props;
-        this.shops = shops;
+    public AdminChatController(CurrentStaff current, ChatBookingService chat) {
+        this.current = current;
         this.chat = chat;
     }
 
@@ -59,6 +57,6 @@ public class AdminChatController {
     }
 
     private Shop shop() {
-        return shops.findBySlug(props.shopSlug()).orElseThrow(() -> new NotFoundException("Shop nicht gefunden."));
+        return current.shop();
     }
 }

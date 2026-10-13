@@ -52,6 +52,13 @@ export const api = {
     conversations: (auth) => request('/admin/chat/conversations', { auth }),
     messages: (auth, phone) => request('/admin/chat/messages?' + new URLSearchParams({ phone }), { auth }),
     simulate: (auth, msg) => request('/admin/chat/simulate', { method: 'POST', body: msg, auth }),
+    changePassword: (auth, currentPassword, newPassword) =>
+      request('/admin/me/password', { method: 'POST', body: { currentPassword, newPassword }, auth }),
+    staff: (auth) => request('/admin/staff', { auth }),
+    createLogin: (auth, form) => request('/admin/staff', { method: 'POST', body: form, auth }),
+    updateLogin: (auth, id, form) => request(`/admin/staff/${id}`, { method: 'PUT', body: form, auth }),
+    resetPassword: (auth, id, password) => request(`/admin/staff/${id}/reset-password`, { method: 'POST', body: { password }, auth }),
+    deleteLogin: (auth, id) => request(`/admin/staff/${id}`, { method: 'DELETE', auth }),
     barbers: (auth) => request('/admin/barbers', { auth }),
     createBarber: (auth, form) => request('/admin/barbers', { method: 'POST', body: form, auth }),
     updateBarber: (auth, id, form) => request(`/admin/barbers/${id}`, { method: 'PUT', body: form, auth }),

@@ -2,6 +2,7 @@ package at.barberbook.common;
 
 import at.barberbook.common.Exceptions.BusinessRuleException;
 import at.barberbook.common.Exceptions.ConflictException;
+import at.barberbook.common.Exceptions.ForbiddenException;
 import at.barberbook.common.Exceptions.NotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -61,6 +62,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> notFound(Exception ex, HttpServletRequest req) {
         String msg = ex instanceof NotFoundException ? ex.getMessage() : "Nicht gefunden.";
         return build(HttpStatus.NOT_FOUND, msg, req, null);
+    }
+
+    // 403 - logged in, but not allowed
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ApiError> forbidden(ForbiddenException ex, HttpServletRequest req) {
+        return build(HttpStatus.FORBIDDEN, ex.getMessage(), req, null);
     }
 
     // 409 - slot already taken, unique key, ...

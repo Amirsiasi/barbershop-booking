@@ -6,7 +6,7 @@ import { euro, longDateOfInstant, timeIn } from '../lib/time.js'
  * Admin area "Anfragen": open requests from WhatsApp with confirm / reject, and a WhatsApp simulator
  * that sends messages through exactly the same code path real WhatsApp messages will use.
  */
-export default function AdminRequests({ auth, tz, onChange }) {
+export default function AdminRequests({ auth, tz, onChange, isOwner = true }) {
   const [requests, setRequests] = useState(null)
   const [error, setError] = useState(null)
   const [busyId, setBusyId] = useState(null)
@@ -35,7 +35,7 @@ export default function AdminRequests({ auth, tz, onChange }) {
   return (
     <main className="wrap requests-page" style={{ paddingBottom: 48 }}>
       <section>
-        <div className="daynav"><h1>Offene Anfragen</h1></div>
+        <div className="daynav"><h1>{isOwner ? 'Offene Anfragen' : 'Meine offenen Anfragen'}</h1></div>
         <p className="section-sub" style={{ marginTop: -6 }}>
           Anfragen per WhatsApp halten den Termin 2 Stunden frei. Ohne Bestätigung wird er automatisch wieder freigegeben.
         </p>
@@ -66,7 +66,7 @@ export default function AdminRequests({ auth, tz, onChange }) {
         </ul>
       </section>
 
-      <Simulator auth={auth} version={chatVersion} onNewRequest={load} />
+      {isOwner && <Simulator auth={auth} version={chatVersion} onNewRequest={load} />}
     </main>
   )
 }

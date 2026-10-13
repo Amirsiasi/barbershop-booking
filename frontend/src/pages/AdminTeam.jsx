@@ -3,15 +3,20 @@ import { api } from '../lib/api.js'
 import Panel from '../components/Panel.jsx'
 
 /** Admin area "Team": add, edit, remove and re-activate barbers. */
-export default function AdminTeam({ auth, onChange }) {
+export default function AdminTeam({ auth, me, onChange }) {
   const [team, setTeam] = useState(null)
+  const [logins, setLogins] = useState([])
+  const [loginFor, setLoginFor] = useState(null) // barber whose login is being created or edited
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState(null)
   const [editing, setEditing] = useState(null) // a barber, or {} for a new one
   const [confirmRemove, setConfirmRemove] = useState(null)
   const [busy, setBusy] = useState(false)
 
-  const load = () => api.admin.barbers(auth).then(setTeam).catch((e) => setError(e.message))
+  const load = () => Promise.all([api.admin.barbers(auth), api.admin.staff(auth)])
+    .then(([t, l]) => { setTeam(t); setLogins(l) })
+    .catch((e) => setError(e.message))
+  const loginOf = (barberId) => logins.find((l) => l.barberId === barberId)
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const done = (text) => {
@@ -81,6 +86,7 @@ export default function AdminTeam({ auth, onChange }) {
                 {b.upcomingAppointments === 0 ? 'Keine kommenden Termine'
                   : `${b.upcomingAppointments} ${b.upcomingAppointments === 1 ? 'kommender Termin' : 'kommende Termine'}`}
               </span>
+              <LoginLine login={loginOf(b.id)} onClick={() => setLoginFor(b)} />
             </div>
             {confirmRemove === b.id ? (
               <div className="team-card__confirm">
@@ -119,6 +125,11 @@ export default function AdminTeam({ auth, onChange }) {
       )}
 
       {editing && <BarberPanel barber={editing} onClose={() => setEditing(null)} onSave={save} />}
+      {loginFor && (
+        <LoginPanel auth={auth} barber={loginFor} login={loginOf(loginFor.id)} isMe={loginOf(loginFor.id)?.username === me?.username}
+                    onClose={() => setLoginFor(null)}
+                    onDone={(text) => { setLoginFor(null); done(text) }} />
+      )}
     </main>
   )
 }
@@ -164,6 +175,129 @@ function BarberPanel({ barber, onClose, onSave }) {
           </p>
         )}
         <button className="btn btn--block" disabled={busy}>{busy ? 'Speichert …' : isNew ? 'Hinzufügen' : 'Speichern'}</button>
+      </form>
+    </Panel>
+  )
+}
+
+const ROLE = { OWNER: 'Inhaber', BARBER: 'Barber' }
+
+function LoginLine({ login, onClick }) {
+  if (!login) {
+    return <button className="login-line login-line--none" onClick={onClick}>Kein Login. Login anlegen</button>
+  }
+  const state = !login.active ? 'gesperrt' : login.mustChangePassword ? 'wartet auf ersten Login' : 'aktiv'
+  return (
+    <button className={`login-line ${login.active ? '' : 'login-line--off'}`} onClick={onClick}>
+      Login <strong>{login.username}</strong>, {ROLE[login.role]}, {state}
+    </button>
+  )
+}
+
+/** A readable start password like "Fade-4821-Kamm" - easy to tell someone, hard to guess. */
+function startPassword() {
+  const words = ['Fade', 'Kamm', 'Bart', 'Schere', 'Klinge', 'Pomade', 'Spiegel', 'Wachs']
+  const [a, b, n] = crypto.getRandomValues(new Uint16Array(3))
+  const first = words[a % words.length]
+  const second = words.filter((w) => w !== first)[b % (words.length - 1)]
+  return `${first}-${(n % 9000) + 1000}-${second}`
+}
+
+function LoginPanel({ auth, barber, login, isMe, onClose, onDone }) {
+  const [username, setUsername] = useState(login?.username || barber.name.toLowerCase().normalize('NFD').replace(/[^a-z0-9._-]/g, ''))
+  const [role, setRole] = useState(login?.role || 'BARBER')
+  const [active, setActive] = useState(login?.active ?? true)
+  const [password, setPassword] = useState(login ? '' : startPassword())
+  const [errors, setErrors] = useState({})
+  const [message, setMessage] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [created, setCreated] = useState(null) // shown once, so the owner can pass it on
+
+  const run = async (fn) => {
+    setBusy(true); setErrors({}); setMessage(null)
+    try { await fn() } catch (err) { setErrors(err.fieldErrors || {}); setMessage(err.message) } finally { setBusy(false) }
+  }
+
+  const submit = (e) => {
+    e.preventDefault()
+    run(async () => {
+      if (!login) {
+        const l = await api.admin.createLogin(auth, { barberId: barber.id, username, password, role })
+        setCreated({ username: l.username, password })
+        return
+      }
+      await api.admin.updateLogin(auth, login.id, { role, active })
+      if (password) {
+        await api.admin.resetPassword(auth, login.id, password)
+        setCreated({ username: login.username, password })
+        return
+      }
+      onDone(`Login von ${barber.name} gespeichert.`)
+    })
+  }
+
+  const remove = () => run(async () => {
+    await api.admin.deleteLogin(auth, login.id)
+    onDone(`Login von ${barber.name} gelöscht.`)
+  })
+
+  if (created) {
+    return (
+      <Panel title="Zugangsdaten" onClose={() => onDone(`Login für ${barber.name} ist bereit.`)}>
+        <p className="section-sub" style={{ marginTop: 12 }}>
+          Gib {barber.name} diese Daten persönlich weiter. Beim ersten Login muss {barber.name} ein eigenes Passwort festlegen.
+          Das Startpasswort wird hier nicht noch einmal angezeigt.
+        </p>
+        <div className="credentials">
+          <div><span>Adresse</span><strong>{window.location.origin}/admin</strong></div>
+          <div><span>Benutzer</span><strong>{created.username}</strong></div>
+          <div><span>Startpasswort</span><strong>{created.password}</strong></div>
+        </div>
+        <button className="btn btn--block" onClick={() => onDone(`Login für ${barber.name} ist bereit.`)}>Fertig</button>
+      </Panel>
+    )
+  }
+
+  return (
+    <Panel title={login ? `Login von ${barber.name}` : `Login für ${barber.name}`} onClose={onClose}>
+      <form className="form" onSubmit={submit} noValidate style={{ marginTop: 16 }}>
+        {message && <p className="alert" role="alert">{message}</p>}
+
+        <div className={`field ${errors.username ? 'field--error' : ''}`}>
+          <label htmlFor="l-user">Benutzername</label>
+          <input id="l-user" value={username} onChange={(e) => setUsername(e.target.value)} disabled={!!login} autoComplete="off" />
+          {errors.username && <p className="field__error">{errors.username}</p>}
+        </div>
+
+        <div className="field">
+          <label htmlFor="l-role">Rolle</label>
+          <select id="l-role" value={role} onChange={(e) => setRole(e.target.value)} disabled={isMe}>
+            <option value="BARBER">Barber: Kalender und eigene Termine</option>
+            <option value="OWNER">Inhaber: alles, auch Team, Logins und Preise</option>
+          </select>
+        </div>
+
+        <div className={`field ${errors.password ? 'field--error' : ''}`}>
+          <label htmlFor="l-pw">{login ? <>Neues Startpasswort <em>(leer lassen = unverändert)</em></> : 'Startpasswort'}</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input id="l-pw" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="off" disabled={isMe} />
+            {!isMe && <button type="button" className="btn btn--ghost" onClick={() => setPassword(startPassword())}>Neu</button>}
+          </div>
+          {errors.password && <p className="field__error">{errors.password}</p>}
+        </div>
+
+        {login && !isMe && (
+          <label className="check">
+            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+            <span>Login aktiv. Ohne Häkchen kann sich {barber.name} nicht mehr anmelden.</span>
+          </label>
+        )}
+        {isMe && <p className="alert alert--info">Das ist dein eigener Login. Dein Passwort änderst du oben rechts unter deinem Namen.</p>}
+
+        <button className="btn btn--block" disabled={busy}>{busy ? 'Speichert …' : login ? 'Speichern' : 'Login anlegen'}</button>
+        {login && !isMe && (
+          <button type="button" className="btn btn--ghost btn--danger-text btn--block" disabled={busy} onClick={remove}>Login löschen</button>
+        )}
       </form>
     </Panel>
   )

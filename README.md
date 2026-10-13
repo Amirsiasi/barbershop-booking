@@ -23,7 +23,11 @@ Entstanden aus meinem Projekt [customer-crud-spring-react](https://github.com/Am
 - Ist die Zeit frei, wird der Termin als **Anfrage** reserviert, und niemand anderer kann ihn online buchen. Ist sie belegt, schlägt das System die nächsten freien Zeiten vor.
 - Der Barber **bestätigt oder lehnt ab**, und der Kunde bekommt sofort eine Antwort. Unbestätigte Anfragen werden nach 2 Stunden automatisch freigegeben.
 
-**Für den Shop** (`/admin`, mit Login)
+**Für den Shop** (`/admin`, persönliche Logins mit zwei Rollen)
+- **Inhaber:** alles, inklusive Team, Logins und Preise. **Barber:** sieht den ganzen Kalender (zum Aushelfen), ändert aber nur eigene Termine, eigene Anfragen und eigene blockierte Zeiten. Die Regeln prüft das Backend bei jeder Anfrage.
+- Der Inhaber legt im Tab Team pro Barber einen Login mit Startpasswort an. Beim ersten Login muss der Barber ein eigenes Passwort festlegen. Passwörter werden nur als BCrypt-Hash gespeichert.
+- Wird ein Barber entfernt, wird sein Login automatisch gesperrt.
+- Der Login aus der `.env` (`ADMIN_USERNAME` / `ADMIN_PASSWORD`) bleibt als Notfall-Zugang mit Inhaber-Rechten.
 - Tageskalender mit einer Spalte pro Barber
 - Termine als „erschienen“, „nicht erschienen“ oder „storniert“ markieren, Telefonnummer direkt anrufen
 - Zeit blockieren (Pause, Urlaub, Arzttermin) – in der Zeit kann niemand online buchen
@@ -142,6 +146,9 @@ Bei jedem Push auf GitHub laufen über **GitHub Actions** ([`.github/workflows/c
 | POST / DELETE | `/api/admin/absences` | Zeit blockieren / freigeben (Login) |
 | GET / POST | `/api/admin/services` | Preisliste inkl. ausgeblendeter Leistungen / neue Leistung (Login) |
 | PUT | `/api/admin/services/{id}` | Preis, Dauer, Name ändern oder ausblenden (Login) |
+| GET | `/api/admin/me` · POST `/api/admin/me/password` | Eigenes Konto, Passwort ändern (Login) |
+| GET / POST | `/api/admin/staff` | Logins des Teams / Login anlegen (Inhaber) |
+| PUT / DELETE | `/api/admin/staff/{id}` · POST `/{id}/reset-password` | Rolle, sperren, löschen, Startpasswort neu setzen (Inhaber) |
 | GET / POST | `/api/admin/barbers` | Team inkl. Ehemalige / Barber hinzufügen (Login) |
 | PUT / DELETE | `/api/admin/barbers/{id}` | Barber bearbeiten / entfernen (Login) |
 | GET | `/api/admin/requests` | Offene Anfragen (Login) |
@@ -157,7 +164,8 @@ Fehler kommen immer im gleichen Format (`ApiError` mit `validationErrors` pro Fe
 backend/src/main/java/at/barberbook/
   shop/          Shop, Öffnungszeiten, Barber, Leistungen, Abwesenheiten
   booking/       Kunden, Termine, SlotCalculator, AvailabilityService, BookingService
-  admin/         Login (Spring Security) und Admin-API
+  admin/         Admin-API und Zugriffsregeln (Spring Security)
+  staff/         Persönliche Logins, Rollen, aktueller Benutzer, Passwortwechsel-Pflicht
   notification/  Bestätigung und Erinnerung per E-Mail (ReminderJob alle 5 Minuten)
   chat/          WhatsApp-Anfragen: MessageParser, Gesprächsablauf, Ablauf unbestätigter Anfragen
   common/        ApiError, GlobalExceptionHandler
@@ -176,7 +184,7 @@ frontend/src/
 - [ ] Impressum und Datenschutzerklärung schreiben (`/impressum`, `/datenschutz` sind Platzhalter)
 - [ ] E-Mail-Anbieter mit eigener Absender-Domain einrichten (SPF/DKIM); SMS optional als weiterer `NotificationSender`
 - [ ] Hosting in der EU (DSGVO), HTTPS, Backups der Datenbank
-- [ ] Starkes Admin-Passwort; später eigene Logins pro Mitarbeiter
+- [ ] Starkes Notfall-Passwort in der `.env`; im Alltag die persönlichen Logins nutzen
 
 ## WhatsApp: Phase 2
 

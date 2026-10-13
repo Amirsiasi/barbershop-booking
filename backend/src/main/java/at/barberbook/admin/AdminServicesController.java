@@ -1,10 +1,10 @@
 package at.barberbook.admin;
 
+import at.barberbook.staff.CurrentStaff;
 import at.barberbook.common.Exceptions.NotFoundException;
 import at.barberbook.shop.ServiceOffering;
 import at.barberbook.shop.ServiceOfferingRepository;
 import at.barberbook.shop.Shop;
-import at.barberbook.shop.ShopRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import org.springframework.http.ResponseEntity;
@@ -40,13 +40,11 @@ public class AdminServicesController {
             Integer sortOrder) {
     }
 
-    private final AdminProperties props;
-    private final ShopRepository shops;
+    private final CurrentStaff current;
     private final ServiceOfferingRepository services;
 
-    public AdminServicesController(AdminProperties props, ShopRepository shops, ServiceOfferingRepository services) {
-        this.props = props;
-        this.shops = shops;
+    public AdminServicesController(CurrentStaff current, ServiceOfferingRepository services) {
+        this.current = current;
         this.services = services;
     }
 
@@ -86,7 +84,7 @@ public class AdminServicesController {
     }
 
     private Shop shop() {
-        return shops.findBySlug(props.shopSlug()).orElseThrow(() -> new NotFoundException("Shop nicht gefunden."));
+        return current.shop();
     }
 
     private static AdminServiceView toView(ServiceOffering s) {

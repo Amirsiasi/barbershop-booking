@@ -7,12 +7,17 @@ import at.barberbook.chat.ChatBookingService;
 import at.barberbook.common.Exceptions.BusinessRuleException;
 import at.barberbook.common.Exceptions.NotFoundException;
 import at.barberbook.shop.*;
+import at.barberbook.staff.CurrentStaff;
+import at.barberbook.staff.StaffPrincipal;
+import at.barberbook.staff.StaffUser;
+import at.barberbook.staff.StaffUserRepository;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,12 +26,16 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 
-/** Back office for the shop owner: day calendar, status changes, blocking time. */
+/**
+ * Back office for the team: day calendar, status changes, requests, blocked times, own account.
+ * Everyone sees the whole calendar (to help each other out); barbers change only their own appointments.
+ */
 @RestController
 @RequestMapping("/api/admin")
 public class AdminController {
 
-    public record Me(String username, String shopSlug, String shopName, String timeZone, List<BarberRef> barbers) {
+    public record Me(String username, String role, Long barberId, String barberName, boolean mustChangePassword,
+                     boolean emergencyLogin, String shopSlug, String shopName, String timeZone, List<BarberRef> barbers) {
     }
 
     public record BarberRef(Long id, String name) {
@@ -50,34 +59,70 @@ public class AdminController {
                                  @Size(max = 120) String reason) {
     }
 
-    private final AdminProperties props;
-    private final ShopRepository shops;
+    public record PasswordChange(
+            @NotBlank(message = "Bitte das aktuelle Passwort eingeben.") String currentPassword,
+            @NotBlank(message = "Bitte ein neues Passwort eingeben.")
+            @Size(min = 8, max = 72, message = "Das neue Passwort braucht mindestens 8 Zeichen.") String newPassword) {
+    }
+
+    private static final String ONLY_OWN = "Das kann nur der zuständige Barber oder der Inhaber.";
+
+    private final CurrentStaff current;
     private final BarberRepository barbers;
     private final AppointmentRepository appointments;
     private final BarberAbsenceRepository absences;
     private final ChatBookingService chat;
+    private final StaffUserRepository staffUsers;
+    private final PasswordEncoder encoder;
 
-    public AdminController(AdminProperties props, ShopRepository shops, BarberRepository barbers,
-                           AppointmentRepository appointments, BarberAbsenceRepository absences,
-                           ChatBookingService chat) {
-        this.props = props;
-        this.shops = shops;
+    public AdminController(CurrentStaff current, BarberRepository barbers, AppointmentRepository appointments,
+                           BarberAbsenceRepository absences, ChatBookingService chat,
+                           StaffUserRepository staffUsers, PasswordEncoder encoder) {
+        this.current = current;
         this.barbers = barbers;
         this.appointments = appointments;
         this.absences = absences;
         this.chat = chat;
+        this.staffUsers = staffUsers;
+        this.encoder = encoder;
     }
 
+    // ---- own account ---------------------------------------------------------------------------
+
     @GetMapping("/me")
-    public Me me(Authentication auth) {
-        Shop shop = shop();
-        return new Me(auth.getName(), shop.getSlug(), shop.getName(), shop.getTimeZone(), barberRefs(shop));
+    @Transactional(readOnly = true)
+    public Me me() {
+        StaffPrincipal p = current.get();
+        Shop shop = current.shop();
+        String barberName = p.barberId() == null ? null : barbers.findById(p.barberId()).map(Barber::getName).orElse(null);
+        return new Me(p.username(), p.role().name(), p.barberId(), barberName, p.mustChangePassword(),
+                p.isEmergencyLogin(), shop.getSlug(), shop.getName(), shop.getTimeZone(), barberRefs(shop));
     }
+
+    @PostMapping("/me/password")
+    @Transactional
+    public ResponseEntity<Void> changePassword(@Valid @RequestBody PasswordChange req) {
+        StaffPrincipal p = current.get();
+        if (p.isEmergencyLogin()) {
+            throw new BusinessRuleException("Das Passwort des Notfall-Zugangs wird in der .env (ADMIN_PASSWORD) geändert.");
+        }
+        StaffUser user = staffUsers.findById(p.staffId()).orElseThrow(() -> new NotFoundException("Benutzer nicht gefunden."));
+        if (!encoder.matches(req.currentPassword(), user.getPasswordHash())) {
+            throw new BusinessRuleException("Das aktuelle Passwort stimmt nicht.");
+        }
+        if (req.currentPassword().equals(req.newPassword())) {
+            throw new BusinessRuleException("Das neue Passwort muss sich vom alten unterscheiden.");
+        }
+        user.changePassword(encoder.encode(req.newPassword()));
+        return ResponseEntity.noContent().build();
+    }
+
+    // ---- calendar ------------------------------------------------------------------------------
 
     @GetMapping("/day")
     @Transactional(readOnly = true)
     public DayView day(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        Shop shop = shop();
+        Shop shop = current.shop();
         ZoneId zone = shop.zone();
         Instant from = date.atStartOfDay(zone).toInstant();
         Instant to = date.plusDays(1).atStartOfDay(zone).toInstant();
@@ -94,9 +139,8 @@ public class AdminController {
     @PatchMapping("/appointments/{id}")
     @Transactional
     public AdminAppointment changeStatus(@PathVariable Long id, @Valid @RequestBody StatusChange change) {
-        Appointment a = appointments.findById(id)
-                .filter(x -> x.getShopId().equals(shop().getId()))
-                .orElseThrow(() -> new NotFoundException("Termin nicht gefunden."));
+        Appointment a = appointment(id);
+        current.requireMayActFor(a.getBarber().getId(), ONLY_OWN);
         if (a.getStatus() == AppointmentStatus.PENDING) {
             // a request: the customer must be told about the decision
             if (change.status() == AppointmentStatus.CONFIRMED) return toAdmin(chat.confirm(a.getShopId(), id));
@@ -115,30 +159,42 @@ public class AdminController {
         return toAdmin(a);
     }
 
-    /** Open requests (e.g. from WhatsApp) that wait for the barber's decision, soonest first. */
+    // ---- requests ------------------------------------------------------------------------------
+
+    /** Open requests (e.g. from WhatsApp), soonest first. Barbers see the requests for themselves. */
     @GetMapping("/requests")
     @Transactional(readOnly = true)
     public List<AdminAppointment> requests() {
-        return appointments.findPending(shop().getId()).stream().map(AdminController::toAdmin).toList();
+        return appointments.findPending(current.shop().getId()).stream()
+                .filter(a -> current.mayActFor(a.getBarber().getId()))
+                .map(AdminController::toAdmin)
+                .toList();
     }
 
     @PostMapping("/appointments/{id}/confirm")
     public AdminAppointment confirm(@PathVariable Long id) {
-        return toAdmin(chat.confirm(shop().getId(), id));
+        Appointment a = appointment(id);
+        current.requireMayActFor(a.getBarber().getId(), ONLY_OWN);
+        return toAdmin(chat.confirm(a.getShopId(), id));
     }
 
     @PostMapping("/appointments/{id}/reject")
     public AdminAppointment reject(@PathVariable Long id) {
-        return toAdmin(chat.reject(shop().getId(), id));
+        Appointment a = appointment(id);
+        current.requireMayActFor(a.getBarber().getId(), ONLY_OWN);
+        return toAdmin(chat.reject(a.getShopId(), id));
     }
+
+    // ---- blocked times -------------------------------------------------------------------------
 
     @PostMapping("/absences")
     @Transactional
     public ResponseEntity<AbsenceView> block(@Valid @RequestBody AbsenceRequest req) {
         if (!req.end().isAfter(req.start())) throw new BusinessRuleException("Ende muss nach dem Beginn liegen.");
         barbers.findById(req.barberId())
-                .filter(b -> b.getShopId().equals(shop().getId()))
+                .filter(b -> b.getShopId().equals(current.shop().getId()))
                 .orElseThrow(() -> new NotFoundException("Barber nicht gefunden."));
+        current.requireMayActFor(req.barberId(), "Du kannst nur deine eigene Zeit blockieren.");
         BarberAbsence saved = absences.save(new BarberAbsence(req.barberId(), req.start(), req.end(), req.reason()));
         return ResponseEntity.status(201).body(new AbsenceView(saved.getId(), saved.getBarberId(),
                 saved.getStartsAt(), saved.getEndsAt(), saved.getReason()));
@@ -147,16 +203,22 @@ public class AdminController {
     @DeleteMapping("/absences/{id}")
     @Transactional
     public ResponseEntity<Void> unblock(@PathVariable Long id) {
-        Long shopId = shop().getId();
+        Long shopId = current.shop().getId();
         BarberAbsence a = absences.findById(id)
                 .filter(x -> barbers.findById(x.getBarberId()).map(b -> b.getShopId().equals(shopId)).orElse(false))
                 .orElseThrow(() -> new NotFoundException("Blocker nicht gefunden."));
+        current.requireMayActFor(a.getBarberId(), "Du kannst nur deine eigenen Blocker entfernen.");
         absences.delete(a);
         return ResponseEntity.noContent().build();
     }
 
-    private Shop shop() {
-        return shops.findBySlug(props.shopSlug()).orElseThrow(() -> new NotFoundException("Shop nicht gefunden."));
+    // ---- helpers -------------------------------------------------------------------------------
+
+    private Appointment appointment(Long id) {
+        Long shopId = current.shop().getId();
+        return appointments.findWithDetails(id)
+                .filter(x -> x.getShopId().equals(shopId))
+                .orElseThrow(() -> new NotFoundException("Termin nicht gefunden."));
     }
 
     private List<BarberRef> barberRefs(Shop shop) {
@@ -164,7 +226,7 @@ public class AdminController {
                 .map(b -> new BarberRef(b.getId(), b.getName())).toList();
     }
 
-    private static AdminAppointment toAdmin(Appointment a) {
+    static AdminAppointment toAdmin(Appointment a) {
         return new AdminAppointment(a.getId(), a.getStartsAt(), a.getEndsAt(), a.getStatus().name(),
                 a.getBarber().getId(), a.getBarber().getName(), a.getService().getName(), a.getPriceCents(),
                 a.getCustomer().fullName().trim(), a.getCustomer().getPhone(), a.getCustomer().getEmail(), a.getNote(),

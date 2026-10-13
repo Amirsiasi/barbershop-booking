@@ -13,6 +13,13 @@ public final class Exceptions {
         }
     }
 
+    /** 403 - logged in, but not allowed (e.g. a barber changing a colleague's appointment). */
+    public static class ForbiddenException extends RuntimeException {
+        public ForbiddenException(String message) {
+            super(message);
+        }
+    }
+
     /** 409 - e.g. the slot was taken a moment ago. */
     public static class ConflictException extends RuntimeException {
         public ConflictException(String message) {

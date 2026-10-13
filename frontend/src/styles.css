@@ -422,3 +422,25 @@ footer a { color: #d6e2db; }
   .team-card { grid-template-columns: auto minmax(0, 1fr); }
   .team-card__actions, .team-card__confirm { grid-column: 1 / -1; justify-content: flex-start; }
 }
+
+/* ---------- logins ---------- */
+.account-btn {
+  background: rgba(255,255,255,.08); border: 0; color: var(--porcelain); border-radius: 999px; padding: 6px 14px;
+  font-weight: 600; cursor: pointer; display: inline-flex; gap: 8px; align-items: baseline;
+}
+.account-btn span { font-size: 12px; color: #b9cbc1; font-weight: 500; }
+.account-btn:hover { background: rgba(255,255,255,.14); }
+.cal-head__me { color: var(--green); }
+.cal-head__me span { color: var(--muted); font-weight: 500; }
+.login-line {
+  justify-self: start; margin-top: 4px; background: none; border: 0; padding: 0; cursor: pointer;
+  font-size: 14px; color: var(--muted); text-align: left;
+}
+.team-card__text .login-line strong { color: var(--ink); font-size: inherit; display: inline; }
+.login-line:hover { text-decoration: underline; }
+.login-line--none { color: var(--green-700); font-weight: 600; }
+.login-line--off { color: var(--red); }
+.credentials { display: grid; gap: 8px; margin: 18px 0; padding: 16px; border-radius: var(--r-md); background: var(--porcelain); border: 1.5px dashed var(--line); }
+.credentials div { display: flex; justify-content: space-between; gap: 12px; }
+.credentials span { color: var(--muted); }
+.credentials strong { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 15px; overflow-wrap: anywhere; text-align: right; }
