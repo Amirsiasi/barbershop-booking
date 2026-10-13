@@ -1,14 +1,23 @@
 package at.barberbook.notification;
 
 /**
- * Sends a message to a customer. The default implementation only logs.
- * To go live, add e.g. a BrevoEmailSender or TwilioSmsSender implementing this
- * interface and annotate it with {@code @Primary} - nothing else has to change.
+ * Sends a message to a customer.
+ *
+ * <ul>
+ *   <li>{@link LoggingNotificationSender}: default, only writes to the log (development).</li>
+ *   <li>{@link EmailNotificationSender}: real e-mails via SMTP, active as soon as SPRING_MAIL_HOST is set.</li>
+ * </ul>
+ * An SMS sender (Twilio, ...) would be one more implementation of this interface.
  */
 public interface NotificationSender {
 
     void send(Message message);
 
-    record Message(String toName, String phone, String email, String subject, String text) {
+    /**
+     * @param senderName  shown as the e-mail sender, e.g. "Mr. Artist Barbershop"
+     * @param calendarIcs optional iCalendar file attached to the e-mail (null = no attachment)
+     */
+    record Message(String toName, String phone, String email, String senderName,
+                   String subject, String text, String calendarIcs) {
     }
 }

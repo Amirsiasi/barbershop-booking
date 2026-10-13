@@ -58,6 +58,12 @@
       <artifactId>spring-boot-starter-security</artifactId>
     </dependency>
 
+    <!-- E-mail confirmations and reminders via SMTP -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-mail</artifactId>
+    </dependency>
+
     <!-- Health check for Docker / hosting -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

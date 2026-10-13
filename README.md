@@ -12,7 +12,7 @@ Entstanden aus meinem Projekt [customer-crud-spring-react](https://github.com/Am
 - In 4 Schritten buchen: Leistung → Barber (oder „egal“) → Tag und Uhrzeit → Name und Telefon
 - Es werden nur wirklich freie Zeiten angezeigt (Öffnungszeiten, Dauer der Leistung, bestehende Termine, Pausen)
 - Bestätigung mit Link zum Verwalten: Termin ansehen, in den Kalender speichern (.ics), bis 2 Stunden vorher selbst absagen
-- Erinnerung 24 Stunden vor dem Termin (weniger No-Shows)
+- Bestätigungs-E-Mail mit Kalender-Anhang (.ics) und Erinnerungs-E-Mail 24 Stunden vorher (weniger No-Shows)
 - Funktioniert am Handy, Live-Status „Jetzt geöffnet bis 19:00 Uhr“
 
 **Für den Shop** (`/admin`, mit Login)
@@ -44,7 +44,7 @@ Entstanden aus meinem Projekt [customer-crud-spring-react](https://github.com/Am
 
 **Mehrere Shops von Anfang an.** Jede Tabelle hat eine `shop_id`. Mr. Artist ist Shop Nr. 1; ein zweiter Shop ist ein neuer Datensatz, kein neues Projekt.
 
-**Benachrichtigungen austauschbar.** `NotificationSender` schreibt im Moment nur ins Log. Für echten Versand eine Klasse für E-Mail (z. B. Brevo) oder SMS (z. B. Twilio) mit `@Primary` hinzufügen – sonst ändert sich nichts.
+**Benachrichtigungen austauschbar.** Hinter dem Interface `NotificationSender` stecken zwei Umsetzungen: `LoggingNotificationSender` (Standard, schreibt nur ins Log) und `EmailNotificationSender` (SMTP, wird automatisch aktiv, sobald `SPRING_MAIL_HOST` gesetzt ist). Die Bestätigung wird im Hintergrund verschickt (`@Async`), damit der Kunde nach dem Klick auf „Buchen“ nicht auf den Mailserver wartet. Ein Fehler beim Mailversand macht die Buchung nie ungültig. SMS wäre eine dritte Klasse – sonst ändert sich nichts.
 
 ## Starten
 
@@ -81,6 +81,23 @@ cd frontend
 npm install
 npm run dev
 ```
+
+### E-Mails verschicken
+
+Ohne Einstellungen werden Bestätigungen und Erinnerungen nur ins Log geschrieben. Für echten Versand diese Umgebungsvariablen setzen (in IntelliJ unter *Environment variables*, bei Docker in `.env`):
+
+| Variable | Brevo | Gmail (zum Testen) |
+|---|---|---|
+| `SPRING_MAIL_HOST` | `smtp-relay.brevo.com` | `smtp.gmail.com` |
+| `SPRING_MAIL_PORT` | `587` | `587` |
+| `SPRING_MAIL_USERNAME` | SMTP-Login aus Brevo → *SMTP & API* | deine Gmail-Adresse |
+| `SPRING_MAIL_PASSWORD` | SMTP-Schlüssel aus Brevo | App-Passwort (braucht 2-Faktor-Anmeldung) |
+| `MAIL_FROM` | bei Brevo bestätigte Absenderadresse | deine Gmail-Adresse |
+| `MAIL_REPLY_TO` | optional, z. B. die Adresse des Shops | optional |
+
+Im Log steht dann beim Start `E-mail sending enabled` und nach jeder Buchung `E-mail "…" sent to …`. Kunden ohne E-Mail-Adresse werden übersprungen.
+
+Für den Livebetrieb: eine eigene Domain als Absender (z. B. `termine@mrartist.at`) mit SPF/DKIM-Einträgen beim Anbieter, sonst landen Mails oft im Spam.
 
 ### Tests
 
@@ -120,7 +137,7 @@ backend/src/main/java/at/barberbook/
   shop/          Shop, Öffnungszeiten, Barber, Leistungen, Abwesenheiten
   booking/       Kunden, Termine, SlotCalculator, AvailabilityService, BookingService
   admin/         Login (Spring Security) und Admin-API
-  notification/  Bestätigung und Erinnerung (ReminderJob alle 5 Minuten)
+  notification/  Bestätigung und Erinnerung per E-Mail (ReminderJob alle 5 Minuten)
   common/        ApiError, GlobalExceptionHandler
 backend/src/main/resources/db/migration/
   V1__schema.sql            Tabellen + Exclusion Constraint
@@ -135,7 +152,7 @@ frontend/src/
 
 - [ ] Preise, Dauer der Leistungen, Telefonnummer und Arbeitszeiten der Barber mit dem Shop abstimmen (Daten stammen aus dem öffentlichen Treatwell-Profil, Stand Oktober 2026). Die Gesichtsbehandlung fehlt noch, weil die Dauer unbekannt ist.
 - [ ] Impressum und Datenschutzerklärung schreiben (`/impressum`, `/datenschutz` sind Platzhalter)
-- [ ] E-Mail- oder SMS-Versand anbinden (`NotificationSender`)
+- [ ] E-Mail-Anbieter mit eigener Absender-Domain einrichten (SPF/DKIM); SMS optional als weiterer `NotificationSender`
 - [ ] Hosting in der EU (DSGVO), HTTPS, Backups der Datenbank
 - [ ] Starkes Admin-Passwort; später eigene Logins pro Mitarbeiter
 

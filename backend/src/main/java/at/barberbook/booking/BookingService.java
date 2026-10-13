@@ -7,7 +7,7 @@ import at.barberbook.common.Exceptions.BusinessRuleException;
 import at.barberbook.common.Exceptions.ConflictException;
 import at.barberbook.common.Exceptions.NotFoundException;
 import at.barberbook.notification.BookingMessages;
-import at.barberbook.notification.NotificationSender;
+import at.barberbook.notification.AsyncNotifier;
 import at.barberbook.shop.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,7 +35,7 @@ public class BookingService {
     private final CustomerRepository customers;
     private final AppointmentRepository appointments;
     private final AvailabilityService availability;
-    private final NotificationSender sender;
+    private final AsyncNotifier notifier;
     private final BookingMessages messages;
     private final BookingProperties props;
     private final Clock clock;
@@ -43,7 +43,7 @@ public class BookingService {
 
     public BookingService(ShopRepository shops, BarberRepository barbers, ServiceOfferingRepository services,
                           CustomerRepository customers, AppointmentRepository appointments,
-                          AvailabilityService availability, NotificationSender sender, BookingMessages messages,
+                          AvailabilityService availability, AsyncNotifier notifier, BookingMessages messages,
                           BookingProperties props, Clock clock, PlatformTransactionManager txManager) {
         this.shops = shops;
         this.barbers = barbers;
@@ -51,7 +51,7 @@ public class BookingService {
         this.customers = customers;
         this.appointments = appointments;
         this.availability = availability;
-        this.sender = sender;
+        this.notifier = notifier;
         this.messages = messages;
         this.props = props;
         this.clock = clock;
@@ -98,7 +98,7 @@ public class BookingService {
                     return appointments.saveAndFlush(a);
                 });
                 Appointment full = appointments.findByToken(saved.getManageToken()).orElseThrow();
-                sendSafely(messages.confirmation(full, shop));
+                notifier.send(messages.confirmation(full, shop)); // in the background
                 log.info("Booked appointment {} for barber {} at {}", full.getId(), barberId, full.getStartsAt());
                 return toView(full, shop);
             } catch (DataIntegrityViolationException ex) {
@@ -150,15 +150,6 @@ public class BookingService {
                 a.getBarber().getName(), a.getCustomer().getFirstName(),
                 shop.getName(), shop.getStreet() + ", " + shop.getZipCity(), shop.getTimeZone(),
                 cancellable, deadline);
-    }
-
-    private void sendSafely(NotificationSender.Message m) {
-        try {
-            sender.send(m);
-        } catch (RuntimeException ex) {
-            // the booking is valid even if the e-mail/SMS provider is down
-            log.warn("Could not send confirmation", ex);
-        }
     }
 
     /** "0660 123 45 67" -> "+436601234567", "0049 ..." -> "+49...". Austria is the default country. */
