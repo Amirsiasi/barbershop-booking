@@ -30,7 +30,8 @@ Entstanden aus meinem Projekt [customer-crud-spring-react](https://github.com/Am
 - Der Inhaber legt im Tab Team pro Barber einen Login mit Startpasswort an. Beim ersten Login muss der Barber ein eigenes Passwort festlegen. Passwörter werden nur als BCrypt-Hash gespeichert.
 - Wird ein Barber entfernt, wird sein Login automatisch gesperrt.
 - Der Login aus der `.env` (`ADMIN_USERNAME` / `ADMIN_PASSWORD`) bleibt als Notfall-Zugang mit Inhaber-Rechten.
-- Tageskalender mit einer Spalte pro Barber
+- Kalender mit Zeitraster: **Tag** (eine Spalte pro Barber), **3 Tage** und **Woche** (eine Spalte pro Tag), jeder Barber in einer eigenen Farbe, rote Linie für „jetzt“, geschlossene Zeiten schraffiert, Filter auf einzelne Barber
+- **Termine selbst eintragen** (Anruf, Kunde im Shop): in eine freie Stelle klicken oder „Neu“ → „Termin eintragen“, auch mit mehreren Leistungen. Doppelbuchungen und blockierte Zeiten werden abgelehnt.
 - Termine als „erschienen“, „nicht erschienen“ oder „storniert“ markieren, Telefonnummer direkt anrufen
 - Zeit blockieren (Pause, Urlaub, Arzttermin) – in der Zeit kann niemand online buchen
 - Kennzahlen des Tages: Termine, erwarteter Umsatz, Stornos
@@ -145,7 +146,8 @@ Bei jedem Push auf GitHub laufen über **GitHub Actions** ([`.github/workflows/c
 | POST | `/api/shops/{slug}/appointments` | Termin buchen mit `serviceIds: [..]` (409 wenn gerade vergeben) |
 | GET | `/api/appointments/{token}` | Termin über den Link ansehen |
 | POST | `/api/appointments/{token}/cancel` | Termin absagen (422 wenn zu spät) |
-| GET | `/api/admin/day?date` | Tagesansicht (Login) |
+| GET | `/api/admin/day?date` · `/api/admin/range?from&days` | Tagesansicht / bis zu 7 Tage (Login) |
+| POST | `/api/admin/appointments` | Termin eintragen (Barber nur für sich selbst) |
 | PATCH | `/api/admin/appointments/{id}` | Status ändern (Login) |
 | POST / DELETE | `/api/admin/absences` | Zeit blockieren / freigeben (Login) |
 | GET / POST | `/api/admin/services` | Preisliste inkl. ausgeblendeter Leistungen / neue Leistung (Login) |

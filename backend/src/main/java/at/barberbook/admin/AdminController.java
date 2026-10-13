@@ -3,6 +3,7 @@ package at.barberbook.admin;
 import at.barberbook.booking.Appointment;
 import at.barberbook.booking.AppointmentRepository;
 import at.barberbook.booking.AppointmentStatus;
+import at.barberbook.booking.BookingService;
 import at.barberbook.chat.ChatBookingService;
 import at.barberbook.common.Exceptions.BusinessRuleException;
 import at.barberbook.common.Exceptions.NotFoundException;
@@ -12,8 +13,11 @@ import at.barberbook.staff.StaffPrincipal;
 import at.barberbook.staff.StaffUser;
 import at.barberbook.staff.StaffUserRepository;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -52,6 +56,24 @@ public class AdminController {
     public record DayView(LocalDate date, List<AdminAppointment> appointments, List<AbsenceView> absences) {
     }
 
+    /** Several days at once (3-day and week view). Appointments carry their start, the client groups them by day. */
+    public record RangeView(LocalDate from, int days, List<AdminAppointment> appointments, List<AbsenceView> absences) {
+    }
+
+    /** An appointment entered by the team: phone call or walk-in. */
+    public record NewAppointment(
+            @NotNull(message = "Bitte wähle einen Barber.") Long barberId,
+            @NotEmpty(message = "Bitte wähle mindestens eine Leistung.")
+            @Size(max = 6, message = "Höchstens 6 Leistungen.") List<@NotNull Long> serviceIds,
+            @NotNull(message = "Bitte wähle eine Uhrzeit.") Instant start,
+            @NotBlank(message = "Vorname fehlt.") @Size(max = 50) String firstName,
+            @Size(max = 50) String lastName,
+            @NotBlank(message = "Telefonnummer fehlt.")
+            @Pattern(regexp = "^[+0-9 ()/-]{6,25}$", message = "Bitte gib eine gültige Telefonnummer ein.") String phone,
+            @Email(message = "Bitte gib eine gültige E-Mail-Adresse ein.") @Size(max = 100) String email,
+            @Size(max = 300) String note) {
+    }
+
     public record StatusChange(@NotNull AppointmentStatus status) {
     }
 
@@ -72,12 +94,14 @@ public class AdminController {
     private final AppointmentRepository appointments;
     private final BarberAbsenceRepository absences;
     private final ChatBookingService chat;
+    private final BookingService booking;
     private final StaffUserRepository staffUsers;
     private final PasswordEncoder encoder;
 
     public AdminController(CurrentStaff current, BarberRepository barbers, AppointmentRepository appointments,
-                           BarberAbsenceRepository absences, ChatBookingService chat,
+                           BarberAbsenceRepository absences, ChatBookingService chat, BookingService booking,
                            StaffUserRepository staffUsers, PasswordEncoder encoder) {
+        this.booking = booking;
         this.current = current;
         this.barbers = barbers;
         this.appointments = appointments;
@@ -134,6 +158,34 @@ public class AdminController {
                 .map(a -> new AbsenceView(a.getId(), a.getBarberId(), a.getStartsAt(), a.getEndsAt(), a.getReason()))
                 .toList();
         return new DayView(date, appts, abs);
+    }
+
+    @GetMapping("/range")
+    @Transactional(readOnly = true)
+    public RangeView range(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                           @RequestParam(defaultValue = "7") int days) {
+        days = Math.max(1, Math.min(7, days));
+        Shop shop = current.shop();
+        ZoneId zone = shop.zone();
+        Instant start = from.atStartOfDay(zone).toInstant();
+        Instant end = from.plusDays(days).atStartOfDay(zone).toInstant();
+
+        List<AdminAppointment> appts = appointments.findForShop(shop.getId(), start, end).stream()
+                .map(AdminController::toAdmin).toList();
+        List<Long> barberIds = barberRefs(shop).stream().map(BarberRef::id).toList();
+        List<AbsenceView> abs = barberIds.isEmpty() ? List.of() : absences.findOverlapping(barberIds, start, end).stream()
+                .map(a -> new AbsenceView(a.getId(), a.getBarberId(), a.getStartsAt(), a.getEndsAt(), a.getReason()))
+                .toList();
+        return new RangeView(from, days, appts, abs);
+    }
+
+    /** The team enters an appointment itself. Barbers only for themselves, the owner for everyone. */
+    @PostMapping("/appointments")
+    public ResponseEntity<AdminAppointment> create(@Valid @RequestBody NewAppointment req) {
+        current.requireMayActFor(req.barberId(), "Du kannst nur dir selbst Termine eintragen.");
+        Appointment a = booking.bookByStaff(current.shop(), req.barberId(), req.serviceIds(), req.start(),
+                req.firstName(), req.lastName(), req.phone(), req.email(), req.note());
+        return ResponseEntity.status(201).body(toAdmin(a));
     }
 
     @PatchMapping("/appointments/{id}")
