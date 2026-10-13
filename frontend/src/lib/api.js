@@ -4,7 +4,8 @@ export const SHOP_SLUG = import.meta.env.VITE_SHOP_SLUG || 'mr-artist'
 
 export class ApiError extends Error {
   constructor(status, body) {
-    super(body?.message || 'Etwas ist schiefgelaufen. Bitte versuche es noch einmal.')
+    // body without our ApiError format (proxy error, CORS rejection, ...) -> show the status code
+    super(body?.message || `Etwas ist schiefgelaufen (Fehler ${status}). Bitte versuche es noch einmal.`)
     this.status = status
     this.fieldErrors = Object.fromEntries((body?.validationErrors || []).map((v) => [v.field, v.message]))
   }
