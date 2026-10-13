@@ -1,5 +1,7 @@
 # BarberBook – Online-Terminbuchung für Barbershops
 
+[![CI](https://github.com/Amirsiasi/barbershop-booking/actions/workflows/ci.yml/badge.svg)](https://github.com/Amirsiasi/barbershop-booking/actions/workflows/ci.yml)
+
 Ein eigenes Buchungssystem statt teurer Plattform-Gebühren. Erster Kunde: **Mr. Artist Barbershop**, Ottakringer Straße 18, 1170 Wien.
 
 Entstanden aus meinem Projekt [customer-crud-spring-react](https://github.com/Amirsiasi/customer-crud-spring-react): Gleicher Stack (Spring Boot + React), gleiche Fehlerbehandlung, aber mit echter Fachlogik.
@@ -113,6 +115,8 @@ TEST_DATABASE_URL=jdbc:postgresql://localhost:5432/barberbook_test mvn test
 ```
 
 Ohne beides werden nur die Unit-Tests ausgeführt.
+
+Bei jedem Push auf GitHub laufen über **GitHub Actions** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) automatisch alle Backend-Tests inklusive der Integrationstests gegen PostgreSQL, der Frontend-Build und der Build beider Docker-Images.
 
 ## API
 
