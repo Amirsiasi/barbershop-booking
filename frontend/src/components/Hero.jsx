@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { hhmm, isoWeekday, minutesIn, todayIn } from '../lib/time.js'
 
 const DAY_NAMES = ['', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag']
@@ -52,7 +53,7 @@ export default function Hero({ shop }) {
           </h1>
           <p className="hero__lead">{shop.tagline}</p>
           <div className="hero__actions">
-            <a className="btn btn--light" href="#buchen">Termin buchen</a>
+            <Link className="btn btn--light" to="/buchen">Termin buchen</Link>
             <a className="hero__address" href={mapsUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
               <strong>{shop.street}</strong>
               {shop.zipCity}

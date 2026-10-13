@@ -11,14 +11,15 @@ export class ApiError extends Error {
   }
 }
 
-async function request(path, { method = 'GET', body, auth } = {}) {
+async function request(path, { method = 'GET', body, auth, raw } = {}) {
   const headers = {}
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  if (raw) headers['Content-Type'] = raw.type
+  else if (body !== undefined) headers['Content-Type'] = 'application/json'
   if (auth) headers['Authorization'] = 'Basic ' + auth
 
   let res
   try {
-    res = await fetch(`/api${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+    res = await fetch(`/api${path}`, { method, headers, body: raw ? raw : body === undefined ? undefined : JSON.stringify(body) })
   } catch {
     throw new ApiError(0, { message: 'Keine Verbindung zum Server. Bitte prüfe deine Internetverbindung.' })
   }
@@ -28,14 +29,22 @@ async function request(path, { method = 'GET', body, auth } = {}) {
   return data
 }
 
-const q = (params) =>
-  '?' + new URLSearchParams(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== '')).toString()
+// arrays become repeated parameters: { serviceId: [1, 4] } -> ?serviceId=1&serviceId=4
+const q = (params) => {
+  const p = new URLSearchParams()
+  Object.entries(params).forEach(([k, v]) => {
+    if (v === null || v === undefined || v === '') return
+    ;[].concat(v).forEach((x) => p.append(k, x))
+  })
+  return '?' + p.toString()
+}
 
 export const api = {
   shop: () => request(`/shops/${SHOP_SLUG}`),
-  days: (serviceId, barberId, from, days = 14) =>
-    request(`/shops/${SHOP_SLUG}/availability/days` + q({ serviceId, barberId, from, days })),
-  slots: (serviceId, barberId, date) => request(`/shops/${SHOP_SLUG}/availability` + q({ serviceId, barberId, date })),
+  days: (serviceIds, barberId, from, days = 14) =>
+    request(`/shops/${SHOP_SLUG}/availability/days` + q({ serviceId: serviceIds, barberId, from, days })),
+  slots: (serviceIds, barberId, date) =>
+    request(`/shops/${SHOP_SLUG}/availability` + q({ serviceId: serviceIds, barberId, date })),
   book: (payload) => request(`/shops/${SHOP_SLUG}/appointments`, { method: 'POST', body: payload }),
   appointment: (token) => request(`/appointments/${token}`),
   cancel: (token) => request(`/appointments/${token}/cancel`, { method: 'POST' }),
@@ -66,5 +75,9 @@ export const api = {
     services: (auth) => request('/admin/services', { auth }),
     createService: (auth, form) => request('/admin/services', { method: 'POST', body: form, auth }),
     updateService: (auth, id, form) => request(`/admin/services/${id}`, { method: 'PUT', body: form, auth }),
+    shopSettings: (auth) => request('/admin/shop', { auth }),
+    saveRating: (auth, rating, reviewCount) => request('/admin/shop/rating', { method: 'PUT', body: { rating, reviewCount }, auth }),
+    uploadPhoto: (auth, blob) => request('/admin/shop/photo', { method: 'PUT', raw: blob, auth }),
+    deletePhoto: (auth) => request('/admin/shop/photo', { method: 'DELETE', auth }),
   },
 }

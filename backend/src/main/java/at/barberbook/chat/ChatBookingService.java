@@ -117,7 +117,12 @@ public class ChatBookingService {
                 serviceList.stream().map(ServiceOffering::getName).toList());
 
         String reply;
-        if (parsed.command() == Command.CANCEL) {
+        List<Integer> numbers = session.getState() == State.AWAITING_SERVICE ? MessageParser.numberList(text) : List.of();
+        if (numbers.size() > 1) {
+            // "1 und 3" / "1, 3" / "1+3" -> several services in one appointment
+            reply = chooseServices(session, numbers, serviceList);
+            if (reply == null) reply = advance(shop, session, MessageParser.nothing(), text, profileName, barberList, serviceList, now);
+        } else if (parsed.command() == Command.CANCEL) {
             session.reset();
             reply = "Alles klar, abgebrochen. Schreib einfach wieder, wenn du einen Termin möchtest.";
         } else if (parsed.command() == Command.HELP) {
@@ -190,9 +195,9 @@ public class ChatBookingService {
             return "Für welchen Tag und welche Uhrzeit? Zum Beispiel: 15.10 11:30";
         }
 
-        ServiceOffering service = serviceList.stream()
-                .filter(x -> x.getId().equals(s.getServiceId())).findFirst().orElse(null);
-        if (service == null) {
+        Map<Long, ServiceOffering> byId = serviceList.stream().collect(Collectors.toMap(ServiceOffering::getId, x -> x));
+        List<ServiceOffering> chosen = s.getServiceIds().stream().map(byId::get).filter(Objects::nonNull).toList();
+        if (chosen.isEmpty()) {
             s.setState(State.AWAITING_SERVICE);
             return serviceQuestion(serviceList);
         }
@@ -215,21 +220,21 @@ public class ChatBookingService {
         Instant holdUntil = now.plus(props.requestHold());
         Instant pendingUntil = holdUntil.isBefore(start.toInstant()) ? holdUntil : start.toInstant();
 
-        Optional<Appointment> reserved = booking.reserveRequest(shop, service, s.getBarberId(), start.toInstant(),
+        Optional<Appointment> reserved = booking.reserveRequest(shop, chosen, s.getBarberId(), start.toInstant(),
                 names[0], names.length > 1 ? names[1] : "", s.getPhone(), BookingSource.WHATSAPP, pendingUntil);
 
         if (reserved.isPresent()) {
             Appointment a = reserved.get();
             s.reset();
             return "Danke " + names[0] + "! Deine Anfrage ist eingegangen:\n"
-                    + when(a.getStartsAt(), shop) + " – " + service.getName() + " bei " + a.getBarber().getName() + ".\n"
+                    + when(a.getStartsAt(), shop) + " – " + a.getServiceLabel() + " bei " + a.getBarber().getName() + ".\n"
                     + "Der Barber bestätigt sie in Kürze, du bekommst dann hier eine Nachricht.";
         }
-        return suggestAlternatives(shop, s, service, start);
+        return suggestAlternatives(shop, s, chosen, start);
     }
 
     /** The wished time is taken: offer the closest free times that day, or the next day with free times. */
-    private String suggestAlternatives(Shop shop, ChatSession s, ServiceOffering service, ZonedDateTime wished) {
+    private String suggestAlternatives(Shop shop, ChatSession s, List<ServiceOffering> service, ZonedDateTime wished) {
         String wishedText = "Um " + TIME.format(wished) + " Uhr ist am " + DAY.format(wished);
         s.setRequestedTime(null);
         s.setState(State.AWAITING_TIME);
@@ -272,7 +277,7 @@ public class ChatBookingService {
         Shop shop = shops.findById(a.getShopId()).orElseThrow();
         if (a.getSource() == BookingSource.WHATSAPP) {
             send(shop, a.getCustomer().getPhone(), "✅ Bestätigt! Bis bald, " + a.getCustomer().getFirstName() + ".\n"
-                    + when(a.getStartsAt(), shop) + " – " + a.getService().getName() + " bei " + a.getBarber().getName() + "\n"
+                    + when(a.getStartsAt(), shop) + " – " + a.getServiceLabel() + " bei " + a.getBarber().getName() + "\n"
                     + shop.getName() + ", " + shop.getStreet() + ", " + shop.getZipCity() + "\n"
                     + "Absagen kannst du hier: " + manageLink(a), clock.instant());
         }
@@ -365,8 +370,24 @@ public class ChatBookingService {
                 + "„Amir 15.10 11:30“ oder „morgen 17 Uhr bei Sami“.";
     }
 
+    /** Stores several numbered choices; returns an error reply if a number is out of range, else null. */
+    private static String chooseServices(ChatSession s, List<Integer> numbers, List<ServiceOffering> serviceList) {
+        List<Long> ids = new ArrayList<>();
+        for (int n : numbers) {
+            if (n < 1 || n > serviceList.size()) {
+                return "Bitte antworte mit Zahlen von 1 bis " + serviceList.size() + ".\n\n" + serviceQuestion(serviceList);
+            }
+            Long id = serviceList.get(n - 1).getId();
+            if (!ids.contains(id)) ids.add(id);
+        }
+        if (ids.size() > 6) return "Bitte wähle höchstens 6 Leistungen.";
+        s.setServiceIds(ids);
+        return null;
+    }
+
     private static String serviceQuestion(List<ServiceOffering> serviceList) {
-        StringBuilder sb = new StringBuilder("Welche Leistung möchtest du? Antworte mit der Nummer:");
+        StringBuilder sb = new StringBuilder("Welche Leistung möchtest du? Antworte mit der Nummer"
+                + " (mehrere gehen auch, z. B. „1 und 3“):");
         for (int i = 0; i < serviceList.size(); i++) {
             ServiceOffering x = serviceList.get(i);
             sb.append("\n").append(i + 1).append("  ").append(x.getName())

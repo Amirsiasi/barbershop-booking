@@ -82,7 +82,7 @@ export default function ManagePage({ shop }) {
               )}
 
               {appt.status !== 'CONFIRMED' && (
-                <div className="done__actions"><Link className="btn" to="/#buchen">Neuen Termin buchen</Link></div>
+                <div className="done__actions"><Link className="btn" to="/buchen">Neuen Termin buchen</Link></div>
               )}
             </>
           )}

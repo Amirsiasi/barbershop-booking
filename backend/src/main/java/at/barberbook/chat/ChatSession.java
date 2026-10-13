@@ -33,6 +33,8 @@ public class ChatSession {
     private LocalDate requestedDate;
     private LocalTime requestedTime;
     private Long serviceId;
+    /** Further services after the first one, comma separated ("4,7"). */
+    private String extraServiceIds;
     private Long barberId;
     private Instant updatedAt;
 
@@ -51,6 +53,7 @@ public class ChatSession {
         requestedDate = null;
         requestedTime = null;
         serviceId = null;
+        extraServiceIds = null;
         barberId = null;
     }
 
@@ -70,7 +73,28 @@ public class ChatSession {
     public LocalTime getRequestedTime() { return requestedTime; }
     public void setRequestedTime(LocalTime requestedTime) { this.requestedTime = requestedTime; }
     public Long getServiceId() { return serviceId; }
-    public void setServiceId(Long serviceId) { this.serviceId = serviceId; }
+    public void setServiceId(Long serviceId) {
+        this.serviceId = serviceId;
+        this.extraServiceIds = null;
+    }
+
+    /** All chosen services in order; empty if none yet. */
+    public java.util.List<Long> getServiceIds() {
+        java.util.List<Long> ids = new java.util.ArrayList<>();
+        if (serviceId == null) return ids;
+        ids.add(serviceId);
+        if (extraServiceIds != null && !extraServiceIds.isBlank()) {
+            for (String part : extraServiceIds.split(",")) ids.add(Long.valueOf(part.trim()));
+        }
+        return ids;
+    }
+
+    public void setServiceIds(java.util.List<Long> ids) {
+        this.serviceId = ids.isEmpty() ? null : ids.get(0);
+        this.extraServiceIds = ids.size() > 1
+                ? ids.subList(1, ids.size()).stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","))
+                : null;
+    }
     public Long getBarberId() { return barberId; }
     public void setBarberId(Long barberId) { this.barberId = barberId; }
     public Instant getUpdatedAt() { return updatedAt; }

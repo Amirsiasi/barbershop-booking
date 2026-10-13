@@ -5,9 +5,6 @@ import at.barberbook.booking.BookingDtos.AppointmentView;
 import at.barberbook.booking.BookingDtos.AvailabilityView;
 import at.barberbook.booking.BookingDtos.BookingRequest;
 import at.barberbook.booking.BookingDtos.SlotView;
-import at.barberbook.common.Exceptions.NotFoundException;
-import at.barberbook.shop.ServiceOffering;
-import at.barberbook.shop.ServiceOfferingRepository;
 import at.barberbook.shop.Shop;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -30,22 +27,19 @@ public class BookingController {
 
     private final BookingService booking;
     private final AvailabilityService availability;
-    private final ServiceOfferingRepository services;
-
-    public BookingController(BookingService booking, AvailabilityService availability, ServiceOfferingRepository services) {
+    public BookingController(BookingService booking, AvailabilityService availability) {
         this.booking = booking;
         this.availability = availability;
-        this.services = services;
     }
 
     /** Free start times for one day. */
     @GetMapping("/shops/{slug}/availability")
     public AvailabilityView availability(@PathVariable String slug,
-                                         @RequestParam Long serviceId,
+                                         @RequestParam("serviceId") List<Long> serviceIds,
                                          @RequestParam(required = false) Long barberId,
                                          @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         Shop shop = booking.shop(slug);
-        List<SlotView> slots = availability.slots(shop, service(shop, serviceId), barberId, date).stream()
+        List<SlotView> slots = availability.slots(shop, booking.services(shop, serviceIds), barberId, date).stream()
                 .map(s -> new SlotView(s.start(), s.end(), s.barberIds()))
                 .toList();
         return new AvailabilityView(date, slots);
@@ -54,12 +48,12 @@ public class BookingController {
     /** Overview of the next days (open? how many free slots?) for the date picker. */
     @GetMapping("/shops/{slug}/availability/days")
     public List<DaySummary> days(@PathVariable String slug,
-                                 @RequestParam Long serviceId,
+                                 @RequestParam("serviceId") List<Long> serviceIds,
                                  @RequestParam(required = false) Long barberId,
                                  @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
                                  @RequestParam(defaultValue = "14") @Min(1) @Max(31) int days) {
         Shop shop = booking.shop(slug);
-        return availability.days(shop, service(shop, serviceId), barberId, from, days);
+        return availability.days(shop, booking.services(shop, serviceIds), barberId, from, days);
     }
 
     @PostMapping("/shops/{slug}/appointments")
@@ -76,11 +70,5 @@ public class BookingController {
     @PostMapping("/appointments/{token}/cancel")
     public AppointmentView cancel(@PathVariable UUID token) {
         return booking.cancel(token);
-    }
-
-    private ServiceOffering service(Shop shop, Long serviceId) {
-        return services.findById(serviceId)
-                .filter(s -> s.getShopId().equals(shop.getId()) && s.isActive())
-                .orElseThrow(() -> new NotFoundException("Leistung nicht gefunden."));
     }
 }

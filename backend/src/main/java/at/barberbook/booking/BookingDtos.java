@@ -20,7 +20,8 @@ public final class BookingDtos {
     }
 
     public record BookingRequest(
-            @NotNull(message = "Bitte wähle eine Leistung.") Long serviceId,
+            @NotEmpty(message = "Bitte wähle eine Leistung.")
+            @Size(max = 6, message = "Bitte wähle höchstens 6 Leistungen.") List<@NotNull Long> serviceIds,
             Long barberId, // null = egal, irgendein freier Barber
             @NotNull(message = "Bitte wähle eine Uhrzeit.") Instant start,
             @NotBlank(message = "Vorname fehlt.") @Size(max = 50) String firstName,
@@ -32,13 +33,17 @@ public final class BookingDtos {
             @AssertTrue(message = "Bitte akzeptiere die Datenschutzerklärung.") boolean privacyAccepted) {
     }
 
+    public record ItemView(String name, int durationMinutes, int priceCents) {
+    }
+
     public record AppointmentView(
             Long id,
             UUID manageToken,
             String status,
             Instant start,
             Instant end,
-            String serviceName,
+            String serviceName,       // all services joined, e.g. "Haarschnitt + Bart"
+            List<ItemView> services,
             int durationMinutes,
             int priceCents,
             String barberName,

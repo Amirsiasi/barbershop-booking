@@ -24,6 +24,10 @@ public class Shop {
     private String timeZone;
     private String highlights;
 
+    /** Shown in the booking summary; maintained by the owner (e.g. copied from Google). */
+    private java.math.BigDecimal rating;
+    private Integer reviewCount;
+
     protected Shop() {
     }
 
@@ -36,6 +40,14 @@ public class Shop {
     public String getPhone() { return phone; }
     public String getEmail() { return email; }
     public String getTimeZone() { return timeZone; }
+
+    public java.math.BigDecimal getRating() { return rating; }
+    public Integer getReviewCount() { return reviewCount; }
+
+    public void updateRating(java.math.BigDecimal rating, Integer reviewCount) {
+        this.rating = rating;
+        this.reviewCount = reviewCount;
+    }
 
     public ZoneId zone() {
         return ZoneId.of(timeZone);

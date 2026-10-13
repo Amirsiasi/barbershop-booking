@@ -11,7 +11,9 @@ Entstanden aus meinem Projekt [customer-crud-spring-react](https://github.com/Am
 ## Was es kann
 
 **Für Kunden** (ohne Konto)
-- In 4 Schritten buchen: Leistung → Barber (oder „egal“) → Tag und Uhrzeit → Name und Telefon
+- Eigene Buchungsseite `/buchen` in 4 Schritten mit Brotkrumen-Navigation: **Leistungen › Barber › Zeit › Bestätigen** (Zurück-Pfeil und Browser-Zurück funktionieren)
+- **Mehrere Leistungen in einem Termin** (z. B. Schnitt + Bart): Dauer und Preis werden addiert, gesucht wird ein Zeitfenster für alles zusammen
+- Kategorie-Leiste zum Springen, Leistungskarten mit +/✓, rechts eine mitlaufende Zusammenfassung mit Shop-Foto, Bewertung, Adresse und Gesamtpreis (am Handy als Leiste unten)
 - Es werden nur wirklich freie Zeiten angezeigt (Öffnungszeiten, Dauer der Leistung, bestehende Termine, Pausen)
 - Bestätigung mit Link zum Verwalten: Termin ansehen, in den Kalender speichern (.ics), bis 2 Stunden vorher selbst absagen
 - Bestätigungs-E-Mail mit Kalender-Anhang (.ics) und Erinnerungs-E-Mail 24 Stunden vorher (weniger No-Shows)
@@ -19,7 +21,7 @@ Entstanden aus meinem Projekt [customer-crud-spring-react](https://github.com/Am
 
 **Per WhatsApp** (Phase 1: Ablauf fertig, Test über den Simulator im Admin)
 - Kunde schreibt z. B. „Amir 11:30 15.10“ oder „morgen 17 Uhr bei Sami“. Name, Tag, Uhrzeit, Barber und Leistung werden aus dem Text erkannt.
-- Fehlt etwas, fragt das System nach (Leistung als nummerierte Liste, Uhrzeit, Name).
+- Fehlt etwas, fragt das System nach (Leistung als nummerierte Liste, Uhrzeit, Name). Mehrere Leistungen gehen mit „1 und 4“.
 - Ist die Zeit frei, wird der Termin als **Anfrage** reserviert, und niemand anderer kann ihn online buchen. Ist sie belegt, schlägt das System die nächsten freien Zeiten vor.
 - Der Barber **bestätigt oder lehnt ab**, und der Kunde bekommt sofort eine Antwort. Unbestätigte Anfragen werden nach 2 Stunden automatisch freigegeben.
 
@@ -35,6 +37,7 @@ Entstanden aus meinem Projekt [customer-crud-spring-react](https://github.com/Am
 - **Anfragen:** offene WhatsApp-Anfragen mit Zähler im Menü, Bestätigen/Ablehnen, WhatsApp-Simulator mit allen Unterhaltungen
 - **Team:** Barber hinzufügen, bearbeiten und entfernen. Mit kommenden Terminen geht Entfernen nicht (erst umbuchen oder stornieren), mit alten Terminen wird der Barber nur ausgeblendet und kann wieder aktiviert werden.
 - **Leistungen & Preise:** Preise, Dauer, Namen und Beschreibungen ändern, neue Leistungen anlegen, Leistungen ausblenden. Bereits gebuchte Termine behalten ihren Preis.
+- **Shop-Auftritt:** Foto vom Shop hochladen (wird im Browser verkleinert, nur JPG/PNG/WebP) und die Bewertung (z. B. aus Google) eintragen. Beides erscheint in der Zusammenfassung der Buchungsseite.
 
 ![Buchung](docs/screenshots/booking.png)
 ![Admin-Kalender](docs/screenshots/admin.png)
@@ -136,9 +139,10 @@ Bei jedem Push auf GitHub laufen über **GitHub Actions** ([`.github/workflows/c
 | Methode | Pfad | Zweck |
 |---|---|---|
 | GET | `/api/shops/{slug}` | Shop, Öffnungszeiten, Barber, Preisliste |
-| GET | `/api/shops/{slug}/availability/days?serviceId&barberId&from&days` | Freie Termine pro Tag (Datumsleiste) |
+| GET | `/api/shops/{slug}/photo` | Shop-Foto |
+| GET | `/api/shops/{slug}/availability/days?serviceId=1&serviceId=4&barberId&from&days` | Freie Termine pro Tag (Datumsleiste), `serviceId` mehrfach für mehrere Leistungen |
 | GET | `/api/shops/{slug}/availability?serviceId&barberId&date` | Freie Uhrzeiten an einem Tag |
-| POST | `/api/shops/{slug}/appointments` | Termin buchen (409 wenn gerade vergeben) |
+| POST | `/api/shops/{slug}/appointments` | Termin buchen mit `serviceIds: [..]` (409 wenn gerade vergeben) |
 | GET | `/api/appointments/{token}` | Termin über den Link ansehen |
 | POST | `/api/appointments/{token}/cancel` | Termin absagen (422 wenn zu spät) |
 | GET | `/api/admin/day?date` | Tagesansicht (Login) |
@@ -146,6 +150,7 @@ Bei jedem Push auf GitHub laufen über **GitHub Actions** ([`.github/workflows/c
 | POST / DELETE | `/api/admin/absences` | Zeit blockieren / freigeben (Login) |
 | GET / POST | `/api/admin/services` | Preisliste inkl. ausgeblendeter Leistungen / neue Leistung (Login) |
 | PUT | `/api/admin/services/{id}` | Preis, Dauer, Name ändern oder ausblenden (Login) |
+| GET · PUT `/rating` · PUT/DELETE `/photo` | `/api/admin/shop` | Shop-Foto und Bewertung (Inhaber) |
 | GET | `/api/admin/me` · POST `/api/admin/me/password` | Eigenes Konto, Passwort ändern (Login) |
 | GET / POST | `/api/admin/staff` | Logins des Teams / Login anlegen (Inhaber) |
 | PUT / DELETE | `/api/admin/staff/{id}` · POST `/{id}/reset-password` | Rolle, sperren, löschen, Startpasswort neu setzen (Inhaber) |
