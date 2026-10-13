@@ -48,7 +48,7 @@ public class BookingMessages {
                 %s""".formatted(
                 a.getCustomer().getFirstName(),
                 date(a.getStartsAt(), shop), time(a.getStartsAt(), shop),
-                a.getService().getName(), a.getService().getDurationMinutes(),
+                a.getServiceLabel(), a.getDurationMinutes(),
                 a.getBarber().getName(),
                 shop.getStreet(), shop.getZipCity(),
                 euro(a.getPriceCents()),
@@ -73,7 +73,7 @@ public class BookingMessages {
                 Bis bald!
                 %s""".formatted(
                 a.getCustomer().getFirstName(),
-                date(a.getStartsAt(), shop), time(a.getStartsAt(), shop), a.getService().getName(), a.getBarber().getName(),
+                date(a.getStartsAt(), shop), time(a.getStartsAt(), shop), a.getServiceLabel(), a.getBarber().getName(),
                 shop.getStreet(), shop.getZipCity(),
                 manageLink(a),
                 shop.getName());
@@ -94,7 +94,7 @@ public class BookingMessages {
                 "DTSTAMP:" + ICS.format(Instant.now()),
                 "DTSTART:" + ICS.format(a.getStartsAt()),
                 "DTEND:" + ICS.format(a.getEndsAt()),
-                "SUMMARY:" + escape(a.getService().getName() + " bei " + a.getBarber().getName()),
+                "SUMMARY:" + escape(a.getServiceLabel() + " bei " + a.getBarber().getName()),
                 "LOCATION:" + escape(location),
                 "DESCRIPTION:" + escape("Termin verwalten: " + manageLink(a)),
                 "BEGIN:VALARM",

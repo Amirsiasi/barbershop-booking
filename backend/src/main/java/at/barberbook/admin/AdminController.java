@@ -228,7 +228,7 @@ public class AdminController {
 
     static AdminAppointment toAdmin(Appointment a) {
         return new AdminAppointment(a.getId(), a.getStartsAt(), a.getEndsAt(), a.getStatus().name(),
-                a.getBarber().getId(), a.getBarber().getName(), a.getService().getName(), a.getPriceCents(),
+                a.getBarber().getId(), a.getBarber().getName(), a.getServiceLabel(), a.getPriceCents(),
                 a.getCustomer().fullName().trim(), a.getCustomer().getPhone(), a.getCustomer().getEmail(), a.getNote(),
                 a.getSource().name(), a.getPendingUntil());
     }

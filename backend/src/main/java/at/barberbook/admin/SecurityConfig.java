@@ -29,7 +29,7 @@ import java.util.List;
  *   <li>OWNER: everything</li>
  *   <li>BARBER: calendar, requests and blocked times - the "only my own appointments" rule is checked in the
  *       controllers, because it depends on the appointment</li>
- *   <li>Team, logins, prices and the chat simulator: OWNER only</li>
+ *   <li>Team, logins, prices, shop photo/rating and the chat simulator: OWNER only</li>
  * </ul>
  * The API is stateless (no session cookie), so CSRF protection is not needed.
  */
@@ -49,7 +49,7 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/admin/barbers/**", "/api/admin/staff/**",
-                                "/api/admin/services/**", "/api/admin/chat/**").hasRole("OWNER")
+                                "/api/admin/services/**", "/api/admin/chat/**", "/api/admin/shop/**").hasRole("OWNER")
                         .requestMatchers("/api/admin/**").hasAnyRole("OWNER", "BARBER")
                         .anyRequest().permitAll())
                 // 401 as JSON and WITHOUT the WWW-Authenticate header, so the browser shows our login form, not its popup

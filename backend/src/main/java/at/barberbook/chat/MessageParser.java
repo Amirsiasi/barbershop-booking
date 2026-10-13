@@ -169,6 +169,28 @@ public final class MessageParser {
         return new Parsed(name, date, time, barber, any, null, serviceName, Command.NONE);
     }
 
+    private static final Pattern NUMBER_LIST =
+            Pattern.compile("^\\s*\\d{1,2}(\\s*(,|\\+|&|und|u\\.|and|\\s)\\s*\\d{1,2})*\\s*\\.?\\s*$", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * "1 und 3", "1, 3", "1+3" -> [1, 3]. Only messages that consist of nothing but small numbers count;
+     * anything else (a date like "15.10", a time) returns an empty list.
+     */
+    public static List<Integer> numberList(String text) {
+        if (text == null || text.contains(":") || text.matches(".*\\d\\.\\d.*") || !NUMBER_LIST.matcher(text).matches()) {
+            return List.of();
+        }
+        List<Integer> result = new ArrayList<>();
+        Matcher m = Pattern.compile("\\d{1,2}").matcher(text);
+        while (m.find()) result.add(Integer.parseInt(m.group()));
+        return result;
+    }
+
+    /** A message that carries no information (used after it was already handled otherwise). */
+    public static Parsed nothing() {
+        return empty(Command.NONE);
+    }
+
     private static Parsed empty(Command c) {
         return new Parsed(null, null, null, null, false, null, null, c);
     }

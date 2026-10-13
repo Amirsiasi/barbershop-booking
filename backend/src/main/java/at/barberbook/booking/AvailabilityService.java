@@ -46,6 +46,15 @@ public class AvailabilityService {
      * @param barberId a specific barber, or {@code null} for "egal / any barber"
      */
     public List<Slot> slots(Shop shop, ServiceOffering service, Long barberId, LocalDate date) {
+        return slots(shop, Duration.ofMinutes(service.getDurationMinutes()), barberId, date);
+    }
+
+    /** Free start times for several services in a row (their durations are added up). */
+    public List<Slot> slots(Shop shop, List<ServiceOffering> services, Long barberId, LocalDate date) {
+        return slots(shop, Duration.ofMinutes(Appointment.totalMinutes(services)), barberId, date);
+    }
+
+    public List<Slot> slots(Shop shop, Duration duration, Long barberId, LocalDate date) {
         ZoneId zone = shop.zone();
         LocalDate today = LocalDate.now(clock.withZone(zone));
         if (date.isBefore(today) || date.isAfter(today.plusDays(props.maxDaysAhead()))) return List.of();
@@ -70,16 +79,17 @@ public class AvailabilityService {
         Instant earliest = clock.instant().plus(props.minLeadTime());
 
         return SlotCalculator.calculate(date, zone, hours.get().getOpenTime(), hours.get().getCloseTime(),
-                Duration.ofMinutes(service.getDurationMinutes()), barberIds, busy, earliest, props.slotStepMinutes());
+                duration, barberIds, busy, earliest, props.slotStepMinutes());
     }
 
     /** Which of the next {@code days} days are open and how many slots are free - for the date strip. */
-    public List<DaySummary> days(Shop shop, ServiceOffering service, Long barberId, LocalDate from, int days) {
+    public List<DaySummary> days(Shop shop, List<ServiceOffering> services, Long barberId, LocalDate from, int days) {
+        Duration duration = Duration.ofMinutes(Appointment.totalMinutes(services));
         List<DaySummary> result = new ArrayList<>();
         for (int i = 0; i < days; i++) {
             LocalDate d = from.plusDays(i);
             boolean open = openingHours.findByShopIdAndDayOfWeek(shop.getId(), d.getDayOfWeek().getValue()).isPresent();
-            int free = open ? slots(shop, service, barberId, d).size() : 0;
+            int free = open ? slots(shop, duration, barberId, d).size() : 0;
             result.add(new DaySummary(d, open, free));
         }
         return result;

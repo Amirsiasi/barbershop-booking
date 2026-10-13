@@ -2,6 +2,7 @@ package at.barberbook.booking;
 
 import at.barberbook.booking.BookingDtos.AppointmentView;
 import at.barberbook.booking.BookingDtos.BookingRequest;
+import at.barberbook.booking.BookingDtos.ItemView;
 import at.barberbook.booking.SlotCalculator.Slot;
 import at.barberbook.common.Exceptions.BusinessRuleException;
 import at.barberbook.common.Exceptions.ConflictException;
@@ -21,7 +22,9 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import java.util.UUID;
 
 @Service
@@ -72,12 +75,10 @@ public class BookingService {
      */
     public AppointmentView book(String shopSlug, BookingRequest req) {
         Shop shop = shop(shopSlug);
-        ServiceOffering service = services.findById(req.serviceId())
-                .filter(s -> s.getShopId().equals(shop.getId()) && s.isActive())
-                .orElseThrow(() -> new NotFoundException("Leistung nicht gefunden."));
+        List<ServiceOffering> chosen = services(shop, req.serviceIds());
 
         LocalDate day = req.start().atZone(shop.zone()).toLocalDate();
-        Slot slot = availability.slots(shop, service, req.barberId(), day).stream()
+        Slot slot = availability.slots(shop, chosen, req.barberId(), day).stream()
                 .filter(s -> s.start().equals(req.start()))
                 .findFirst()
                 .orElseThrow(() -> new ConflictException(SLOT_TAKEN));
@@ -94,7 +95,7 @@ public class BookingService {
                     customers.save(customer);
 
                     Barber barber = barbers.getReferenceById(barberId);
-                    Appointment a = new Appointment(shop.getId(), barber, service, customer, req.start(),
+                    Appointment a = new Appointment(shop.getId(), barber, chosen, customer, req.start(),
                             blankToNull(req.note()), clock.instant());
                     return appointments.saveAndFlush(a);
                 });
@@ -117,11 +118,11 @@ public class BookingService {
      * @param phone       already normalised phone number (see {@link #normalizePhone})
      * @return the reserved appointment, or empty if nobody is free at that time
      */
-    public Optional<Appointment> reserveRequest(Shop shop, ServiceOffering service, Long barberId, Instant start,
+    public Optional<Appointment> reserveRequest(Shop shop, List<ServiceOffering> chosen, Long barberId, Instant start,
                                                 String firstName, String lastName, String phone,
                                                 BookingSource source, Instant pendingUntil) {
         LocalDate day = start.atZone(shop.zone()).toLocalDate();
-        Optional<Slot> slot = availability.slots(shop, service, barberId, day).stream()
+        Optional<Slot> slot = availability.slots(shop, chosen, barberId, day).stream()
                 .filter(s -> s.start().equals(start))
                 .findFirst();
         if (slot.isEmpty()) return Optional.empty();
@@ -133,7 +134,7 @@ public class BookingService {
                     // returning customers keep the name they gave before
                     Customer customer = customers.findByShopIdAndPhone(shop.getId(), phone)
                             .orElseGet(() -> customers.save(new Customer(shop.getId(), firstName, lastName, phone, null)));
-                    Appointment a = Appointment.request(shop.getId(), barbers.getReferenceById(candidate), service,
+                    Appointment a = Appointment.request(shop.getId(), barbers.getReferenceById(candidate), chosen,
                             customer, start, null, clock.instant(), source, pendingUntil);
                     return appointments.saveAndFlush(a);
                 });
@@ -172,6 +173,21 @@ public class BookingService {
 
     // ---- helpers -------------------------------------------------------------------------
 
+    /**
+     * Loads the chosen services in the order the customer picked them. Unknown, inactive or foreign ids -> 404;
+     * the same service twice is counted once.
+     */
+    public List<ServiceOffering> services(Shop shop, List<Long> ids) {
+        if (ids == null || ids.isEmpty()) throw new BusinessRuleException("Bitte wähle eine Leistung.");
+        List<Long> distinct = ids.stream().distinct().toList();
+        if (distinct.size() > 6) throw new BusinessRuleException("Bitte wähle höchstens 6 Leistungen.");
+        Map<Long, ServiceOffering> found = services.findAllById(distinct).stream()
+                .filter(s -> s.getShopId().equals(shop.getId()) && s.isActive())
+                .collect(Collectors.toMap(ServiceOffering::getId, s -> s));
+        if (found.size() != distinct.size()) throw new NotFoundException("Leistung nicht gefunden.");
+        return distinct.stream().map(found::get).toList();
+    }
+
     public Shop shop(String slug) {
         return shops.findBySlug(slug).orElseThrow(() -> new NotFoundException("Shop nicht gefunden."));
     }
@@ -184,7 +200,9 @@ public class BookingService {
         Instant deadline = cancelDeadline(a);
         boolean cancellable = a.getStatus() == AppointmentStatus.CONFIRMED && clock.instant().isBefore(deadline);
         return new AppointmentView(a.getId(), a.getManageToken(), a.getStatus().name(), a.getStartsAt(), a.getEndsAt(),
-                a.getService().getName(), a.getService().getDurationMinutes(), a.getPriceCents(),
+                a.getServiceLabel(),
+                a.getItems().stream().map(i -> new ItemView(i.getName(), i.getDurationMinutes(), i.getPriceCents())).toList(),
+                a.getDurationMinutes(), a.getPriceCents(),
                 a.getBarber().getName(), a.getCustomer().getFirstName(),
                 shop.getName(), shop.getStreet() + ", " + shop.getZipCity(), shop.getTimeZone(),
                 cancellable, deadline);

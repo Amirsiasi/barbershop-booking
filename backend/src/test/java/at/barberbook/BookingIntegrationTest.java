@@ -91,14 +91,17 @@ class BookingIntegrationTest {
 
     long reza;
     long sami;
-    long haircut; // "Schneiden & Föhnen", 35 min
+    long haircut; // "Schneiden & Föhnen", 35 min, 28 €
+    long beard;   // "Bart kürzen & stylen", 30 min, 19 €
 
     @BeforeEach
     void cleanAndLookup() {
-        jdbc.execute("TRUNCATE appointment, customer, barber_absence, chat_message, chat_session, staff_user RESTART IDENTITY CASCADE");
+        jdbc.execute("TRUNCATE appointment, appointment_item, customer, barber_absence, chat_message, chat_session, staff_user, shop_photo RESTART IDENTITY CASCADE");
+        jdbc.update("update shop set rating = null, review_count = null");
         reza = jdbc.queryForObject("select id from barber where name = 'Reza'", Long.class);
         sami = jdbc.queryForObject("select id from barber where name = 'Sami'", Long.class);
         haircut = jdbc.queryForObject("select id from service_offering where name = 'Schneiden & Föhnen'", Long.class);
+        beard = jdbc.queryForObject("select id from service_offering where name = 'Bart kürzen & stylen'", Long.class);
     }
 
     static Instant vienna(int hour, int minute) {
@@ -106,7 +109,7 @@ class BookingIntegrationTest {
     }
 
     BookingRequest request(Long barberId, Instant start, String phone) {
-        return new BookingRequest(haircut, barberId, start, "Max", "Muster", phone, "max@example.com", null, true);
+        return new BookingRequest(List.of(haircut), barberId, start, "Max", "Muster", phone, "max@example.com", null, true);
     }
 
     @Test
@@ -158,7 +161,7 @@ class BookingIntegrationTest {
     @Test
     void invalid_input_returns_field_errors() throws Exception {
         String body = """
-                {"serviceId": %d, "start": "%s", "firstName": "", "lastName": "M", "phone": "abc", "privacyAccepted": false}
+                {"serviceIds": [%d], "start": "%s", "firstName": "", "lastName": "M", "phone": "abc", "privacyAccepted": false}
                 """.formatted(haircut, vienna(12, 0));
         mvc.perform(post("/api/shops/mr-artist/appointments").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest())
@@ -604,5 +607,104 @@ class BookingIntegrationTest {
         mvc.perform(put("/api/admin/staff/" + rezasLogin).with(httpBasic("reza", "start1234"))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"role\": \"BARBER\", \"active\": true}"))
                 .andExpect(status().isUnprocessableEntity());
+    }
+
+    // ---- several services in one appointment -----------------------------------------------------
+
+    @Test
+    void several_services_are_booked_back_to_back_with_summed_duration_and_price() throws Exception {
+        BookingRequest req = new BookingRequest(List.of(haircut, beard), sami, vienna(10, 0), "Max", "Muster",
+                "0660 4444444", null, null, true);
+        mvc.perform(post("/api/shops/mr-artist/appointments").contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(req)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.serviceName").value("Schneiden & Föhnen + Bart kürzen & stylen"))
+                .andExpect(jsonPath("$.services.length()").value(2))
+                .andExpect(jsonPath("$.services[1].priceCents").value(1900))
+                .andExpect(jsonPath("$.durationMinutes").value(65))
+                .andExpect(jsonPath("$.priceCents").value(4700))
+                .andExpect(jsonPath("$.end").value(vienna(11, 5).toString()));
+
+        assertThat(jdbc.queryForObject("select count(*) from appointment_item", Integer.class)).isEqualTo(2);
+
+        // 10:00-11:05 is taken for Sami, the next haircut on the 15-minute grid starts at 11:15
+        List<String> free = freeStarts(sami);
+        assertThat(free).doesNotContain(vienna(10, 30).toString(), vienna(11, 0).toString())
+                .contains(vienna(11, 15).toString());
+
+        // 65 minutes do not fit after 17:55 (closing 19:00)
+        String res = mvc.perform(get("/api/shops/mr-artist/availability")
+                        .param("serviceId", String.valueOf(haircut)).param("serviceId", String.valueOf(beard))
+                        .param("barberId", String.valueOf(sami)).param("date", MONDAY.toString()))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        List<String> both = new ArrayList<>();
+        for (JsonNode slot : json.readTree(res).get("slots")) both.add(slot.get("start").asText());
+        assertThat(both).contains(vienna(17, 45).toString()).doesNotContain(vienna(18, 0).toString());
+    }
+
+    @Test
+    void unknown_services_are_rejected() throws Exception {
+        BookingRequest req = new BookingRequest(List.of(haircut, 999_999L), null, vienna(12, 0), "Max", "Muster",
+                "0660 4444445", null, null, true);
+        mvc.perform(post("/api/shops/mr-artist/appointments").contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(req)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void whatsapp_customers_can_choose_several_services_by_number() throws Exception {
+        assertThat(say("0664 3000001", "Amir 11:30 07.01")).contains("mehrere gehen auch");
+        String reply = say("0664 3000001", "1 und 4");
+        assertThat(reply).contains("Anfrage ist eingegangen").contains("Schneiden & Föhnen + Bart kürzen & stylen");
+        Integer minutes = jdbc.queryForObject(
+                "select (extract(epoch from ends_at - starts_at) / 60)::int from appointment where status = 'PENDING'", Integer.class);
+        assertThat(minutes).isEqualTo(65);
+    }
+
+    // ---- shop photo and rating -------------------------------------------------------------------
+
+    static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D, 'I', 'H', 'D', 'R'};
+
+    @Test
+    void the_owner_uploads_a_shop_photo_and_sets_the_rating() throws Exception {
+        mvc.perform(get("/api/shops/mr-artist")).andExpect(jsonPath("$.photoUrl").value(org.hamcrest.Matchers.nullValue()));
+
+        String res = mvc.perform(put("/api/admin/shop/photo").with(httpBasic("admin", "test-secret"))
+                        .contentType("image/png").content(PNG))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String url = json.readTree(res).get("photoUrl").asText();
+        assertThat(url).startsWith("/api/shops/mr-artist/photo?v=");
+
+        mvc.perform(get("/api/shops/mr-artist")).andExpect(jsonPath("$.photoUrl").value(url));
+        mvc.perform(get("/api/shops/mr-artist/photo"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("image/png"))
+                .andExpect(content().bytes(PNG));
+
+        // only real pictures - an SVG/HTML file must never be served from our domain
+        mvc.perform(put("/api/admin/shop/photo").with(httpBasic("admin", "test-secret"))
+                        .contentType("image/png").content("<svg onload=alert(1)></svg>".getBytes()))
+                .andExpect(status().isUnprocessableEntity());
+
+        mvc.perform(put("/api/admin/shop/rating").with(httpBasic("admin", "test-secret"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"rating\": 4.8, \"reviewCount\": 127}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/shops/mr-artist"))
+                .andExpect(jsonPath("$.rating").value(4.8))
+                .andExpect(jsonPath("$.reviewCount").value(127));
+        mvc.perform(put("/api/admin/shop/rating").with(httpBasic("admin", "test-secret"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"rating\": 5.5, \"reviewCount\": 1}"))
+                .andExpect(status().isBadRequest());
+
+        // barbers may not change it
+        createLogin(sami, "sami", "start1234", "BARBER", true);
+        mvc.perform(put("/api/admin/shop/photo").with(httpBasic("sami", "start1234"))
+                        .contentType("image/png").content(PNG))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(delete("/api/admin/shop/photo").with(httpBasic("admin", "test-secret"))).andExpect(status().isOk());
+        mvc.perform(get("/api/shops/mr-artist/photo")).andExpect(status().isNotFound());
     }
 }

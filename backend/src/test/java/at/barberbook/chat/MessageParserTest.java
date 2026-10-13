@@ -91,4 +91,15 @@ class MessageParserTest {
         assertThat(p.time()).isEqualTo(LocalTime.of(14, 0));
         assertThat(p.name()).isNull();
     }
+
+    @Test
+    void several_numbers_mean_several_services() {
+        assertThat(MessageParser.numberList("1 und 3")).containsExactly(1, 3);
+        assertThat(MessageParser.numberList("1, 4")).containsExactly(1, 4);
+        assertThat(MessageParser.numberList("2+5")).containsExactly(2, 5);
+        assertThat(MessageParser.numberList("2")).containsExactly(2);
+        assertThat(MessageParser.numberList("15.10")).isEmpty();
+        assertThat(MessageParser.numberList("11:30")).isEmpty();
+        assertThat(MessageParser.numberList("Amir 1 und 3")).isEmpty();
+    }
 }
