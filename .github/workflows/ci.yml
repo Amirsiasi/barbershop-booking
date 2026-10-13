@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -30,6 +30,21 @@ jobs:
       # (Docker is available on GitHub runners, so Testcontainers starts it automatically)
       - name: Build and test
         run: mvn -B -ntp verify
+
+      # turns every failed test into an error annotation on the GitHub run page
+      - name: Show failed tests
+        if: failure()
+        shell: python3 {0}
+        run: |
+          import glob, xml.etree.ElementTree as ET
+          for f in glob.glob('target/surefire-reports/TEST-*.xml')  # runs inside backend/:
+              for case in ET.parse(f).getroot().iter('testcase'):
+                  for kind in ('failure', 'error'):
+                      e = case.find(kind)
+                      if e is not None:
+                          msg = (e.get('message') or e.text or '').replace('\n', ' ').replace('%', '%25')[:900]
+                          name = case.get('classname').split('.')[-1] + '.' + case.get('name')
+                          print(f'::error title={name}::{msg}')
 
       - name: Upload test reports
         if: failure()

@@ -444,7 +444,7 @@ class BookingIntegrationTest {
         long id = createBarber("Yusuf");
         try {
             String booked = mvc.perform(post("/api/shops/mr-artist/appointments").contentType(MediaType.APPLICATION_JSON)
-                            .content(json.writeValueAsString(request(id, vienna(10, 0), "0660 8000001"))))
+                            .content(json.writeValueAsString(request(id, vienna(11, 0), "0660 8000001"))))
                     .andExpect(status().isCreated())
                     .andReturn().getResponse().getContentAsString();
 
