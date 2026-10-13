@@ -52,6 +52,8 @@ export const api = {
   admin: {
     me: (auth) => request('/admin/me', { auth }),
     day: (auth, date) => request('/admin/day' + q({ date }), { auth }),
+    range: (auth, from, days) => request('/admin/range' + q({ from, days }), { auth }),
+    createAppointment: (auth, payload) => request('/admin/appointments', { method: 'POST', body: payload, auth }),
     setStatus: (auth, id, status) => request(`/admin/appointments/${id}`, { method: 'PATCH', body: { status }, auth }),
     block: (auth, payload) => request('/admin/absences', { method: 'POST', body: payload, auth }),
     unblock: (auth, id) => request(`/admin/absences/${id}`, { method: 'DELETE', auth }),
