@@ -96,6 +96,11 @@ public class Appointment {
         return a;
     }
 
+    /** Entered by the team (phone call, walk-in) instead of booked online. */
+    void markEnteredByStaff() {
+        this.source = BookingSource.ADMIN;
+    }
+
     public void changeStatus(AppointmentStatus newStatus) {
         this.status = newStatus;
         if (newStatus != AppointmentStatus.PENDING) this.pendingUntil = null;

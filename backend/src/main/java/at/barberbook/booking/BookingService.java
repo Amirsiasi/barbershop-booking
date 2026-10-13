@@ -39,6 +39,7 @@ public class BookingService {
     private final CustomerRepository customers;
     private final AppointmentRepository appointments;
     private final AvailabilityService availability;
+    private final BarberAbsenceRepository absences;
     private final AsyncNotifier notifier;
     private final BookingMessages messages;
     private final BookingProperties props;
@@ -47,7 +48,8 @@ public class BookingService {
 
     public BookingService(ShopRepository shops, BarberRepository barbers, ServiceOfferingRepository services,
                           CustomerRepository customers, AppointmentRepository appointments,
-                          AvailabilityService availability, AsyncNotifier notifier, BookingMessages messages,
+                          AvailabilityService availability, BarberAbsenceRepository absences,
+                          AsyncNotifier notifier, BookingMessages messages,
                           BookingProperties props, Clock clock, PlatformTransactionManager txManager) {
         this.shops = shops;
         this.barbers = barbers;
@@ -55,6 +57,7 @@ public class BookingService {
         this.customers = customers;
         this.appointments = appointments;
         this.availability = availability;
+        this.absences = absences;
         this.notifier = notifier;
         this.messages = messages;
         this.props = props;
@@ -147,6 +150,53 @@ public class BookingService {
         return Optional.empty();
     }
 
+    /**
+     * An appointment the team enters itself (phone call, walk-in). Unlike online bookings it may start at any
+     * minute and outside the usual grid, but it must not overlap another appointment or a blocked time of
+     * that barber. The database constraint stays the last line of defence.
+     */
+    public Appointment bookByStaff(Shop shop, Long barberId, List<Long> serviceIds, Instant start,
+                                   String firstName, String lastName, String rawPhone, String email, String note) {
+        Barber barber = barbers.findById(barberId)
+                .filter(b -> b.getShopId().equals(shop.getId()) && b.isActive())
+                .orElseThrow(() -> new NotFoundException("Barber nicht gefunden."));
+        List<ServiceOffering> chosen = services(shop, serviceIds);
+        Instant end = start.plusSeconds(Appointment.totalMinutes(chosen) * 60L);
+
+        LocalDate today = LocalDate.now(clock.withZone(shop.zone()));
+        if (start.atZone(shop.zone()).toLocalDate().isBefore(today)) {
+            throw new BusinessRuleException("Termine in der Vergangenheit können nicht eingetragen werden.");
+        }
+        if (!appointments.findBlocking(List.of(barberId), start, end).isEmpty()) {
+            throw new ConflictException(barber.getName() + " hat in dieser Zeit schon einen Termin.");
+        }
+        if (!absences.findOverlapping(List.of(barberId), start, end).isEmpty()) {
+            throw new ConflictException(barber.getName() + " ist in dieser Zeit blockiert (z. B. Pause).");
+        }
+
+        String phone = normalizePhone(rawPhone);
+        try {
+            Appointment saved = tx.execute(status -> {
+                Customer customer = customers.findByShopIdAndPhone(shop.getId(), phone)
+                        .orElseGet(() -> new Customer(shop.getId(), firstName.trim(), blankToEmpty(lastName), phone, blankToNull(email)));
+                // a staff entry often has only a first name: keep what we already know about a returning customer
+                customer.updateContact(firstName.trim(),
+                        lastName == null || lastName.isBlank() ? customer.getLastName() : lastName.trim(), blankToNull(email));
+                customers.save(customer);
+                Appointment a = new Appointment(shop.getId(), barbers.getReferenceById(barberId), chosen, customer,
+                        start, blankToNull(note), clock.instant());
+                a.markEnteredByStaff();
+                return appointments.saveAndFlush(a);
+            });
+            Appointment full = appointments.findWithDetails(saved.getId()).orElseThrow();
+            if (full.getCustomer().getEmail() != null) notifier.send(messages.confirmation(full, shop));
+            log.info("Staff entered appointment {} for barber {} at {}", full.getId(), barberId, start);
+            return full;
+        } catch (DataIntegrityViolationException ex) {
+            throw new ConflictException(barber.getName() + " hat in dieser Zeit schon einen Termin.");
+        }
+    }
+
     public AppointmentView findByToken(UUID token) {
         Appointment a = appointments.findByToken(token).orElseThrow(() -> new NotFoundException("Termin nicht gefunden."));
         return toView(a, shops.findById(a.getShopId()).orElseThrow());
@@ -215,6 +265,10 @@ public class BookingService {
         else if (p.startsWith("0")) p = "+43" + p.substring(1);
         else if (!p.startsWith("+")) p = "+43" + p;
         return p;
+    }
+
+    private static String blankToEmpty(String s) {
+        return s == null ? "" : s.trim();
     }
 
     private static String blankToNull(String s) {

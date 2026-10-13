@@ -707,4 +707,38 @@ class BookingIntegrationTest {
         mvc.perform(delete("/api/admin/shop/photo").with(httpBasic("admin", "test-secret"))).andExpect(status().isOk());
         mvc.perform(get("/api/shops/mr-artist/photo")).andExpect(status().isNotFound());
     }
+
+    // ---- appointments entered by the team (phone call, walk-in) ----------------------------------
+
+    @Test
+    void the_team_enters_appointments_itself_without_double_booking() throws Exception {
+        String body = """
+                {"barberId": %d, "serviceIds": [%d, %d], "start": "%s", "firstName": "Karim", "phone": "0660 5555555"}
+                """;
+        mvc.perform(post("/api/admin/appointments").with(httpBasic("admin", "test-secret"))
+                        .contentType(MediaType.APPLICATION_JSON).content(body.formatted(sami, haircut, beard, vienna(10, 5))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.source").value("ADMIN"))
+                .andExpect(jsonPath("$.serviceName").value("Schneiden & Föhnen + Bart kürzen & stylen"))
+                .andExpect(jsonPath("$.end").value(vienna(11, 10).toString()));
+
+        // overlaps the first one
+        mvc.perform(post("/api/admin/appointments").with(httpBasic("admin", "test-secret"))
+                        .contentType(MediaType.APPLICATION_JSON).content(body.formatted(sami, haircut, beard, vienna(10, 30))))
+                .andExpect(status().isConflict());
+
+        // a barber enters appointments only for himself
+        createLogin(sami, "sami", "start1234", "BARBER", true);
+        mvc.perform(post("/api/admin/appointments").with(httpBasic("sami", "start1234"))
+                        .contentType(MediaType.APPLICATION_JSON).content(body.formatted(reza, haircut, beard, vienna(12, 0))))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/admin/appointments").with(httpBasic("sami", "start1234"))
+                        .contentType(MediaType.APPLICATION_JSON).content(body.formatted(sami, haircut, beard, vienna(12, 0))))
+                .andExpect(status().isCreated());
+
+        mvc.perform(get("/api/admin/range").param("from", MONDAY.toString()).param("days", "3")
+                        .with(httpBasic("admin", "test-secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.appointments.length()").value(2));
+    }
 }
