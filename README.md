@@ -17,11 +17,18 @@ Entstanden aus meinem Projekt [customer-crud-spring-react](https://github.com/Am
 - Bestätigungs-E-Mail mit Kalender-Anhang (.ics) und Erinnerungs-E-Mail 24 Stunden vorher (weniger No-Shows)
 - Funktioniert am Handy, Live-Status „Jetzt geöffnet bis 19:00 Uhr“
 
+**Per WhatsApp** (Phase 1: Ablauf fertig, Test über den Simulator im Admin)
+- Kunde schreibt z. B. „Amir 11:30 15.10“ oder „morgen 17 Uhr bei Sami“. Name, Tag, Uhrzeit, Barber und Leistung werden aus dem Text erkannt.
+- Fehlt etwas, fragt das System nach (Leistung als nummerierte Liste, Uhrzeit, Name).
+- Ist die Zeit frei, wird der Termin als **Anfrage** reserviert, und niemand anderer kann ihn online buchen. Ist sie belegt, schlägt das System die nächsten freien Zeiten vor.
+- Der Barber **bestätigt oder lehnt ab**, und der Kunde bekommt sofort eine Antwort. Unbestätigte Anfragen werden nach 2 Stunden automatisch freigegeben.
+
 **Für den Shop** (`/admin`, mit Login)
 - Tageskalender mit einer Spalte pro Barber
 - Termine als „erschienen“, „nicht erschienen“ oder „storniert“ markieren, Telefonnummer direkt anrufen
 - Zeit blockieren (Pause, Urlaub, Arzttermin) – in der Zeit kann niemand online buchen
 - Kennzahlen des Tages: Termine, erwarteter Umsatz, Stornos
+- **Anfragen:** offene WhatsApp-Anfragen mit Zähler im Menü, Bestätigen/Ablehnen, WhatsApp-Simulator mit allen Unterhaltungen
 - **Leistungen & Preise:** Preise, Dauer, Namen und Beschreibungen ändern, neue Leistungen anlegen, Leistungen ausblenden. Bereits gebuchte Termine behalten ihren Preis.
 
 ![Buchung](docs/screenshots/booking.png)
@@ -134,6 +141,10 @@ Bei jedem Push auf GitHub laufen über **GitHub Actions** ([`.github/workflows/c
 | POST / DELETE | `/api/admin/absences` | Zeit blockieren / freigeben (Login) |
 | GET / POST | `/api/admin/services` | Preisliste inkl. ausgeblendeter Leistungen / neue Leistung (Login) |
 | PUT | `/api/admin/services/{id}` | Preis, Dauer, Name ändern oder ausblenden (Login) |
+| GET | `/api/admin/requests` | Offene Anfragen (Login) |
+| POST | `/api/admin/appointments/{id}/confirm` · `/reject` | Anfrage bestätigen / ablehnen, Kunde wird benachrichtigt (Login) |
+| POST | `/api/admin/chat/simulate` | Chat-Nachricht wie von WhatsApp verarbeiten (Login) |
+| GET | `/api/admin/chat/conversations` · `/messages?phone=` | Unterhaltungen lesen (Login) |
 
 Fehler kommen immer im gleichen Format (`ApiError` mit `validationErrors` pro Feld) – übernommen aus customer-crud-spring-react.
 
@@ -145,6 +156,7 @@ backend/src/main/java/at/barberbook/
   booking/       Kunden, Termine, SlotCalculator, AvailabilityService, BookingService
   admin/         Login (Spring Security) und Admin-API
   notification/  Bestätigung und Erinnerung per E-Mail (ReminderJob alle 5 Minuten)
+  chat/          WhatsApp-Anfragen: MessageParser, Gesprächsablauf, Ablauf unbestätigter Anfragen
   common/        ApiError, GlobalExceptionHandler
 backend/src/main/resources/db/migration/
   V1__schema.sql            Tabellen + Exclusion Constraint
@@ -162,6 +174,15 @@ frontend/src/
 - [ ] E-Mail-Anbieter mit eigener Absender-Domain einrichten (SPF/DKIM); SMS optional als weiterer `NotificationSender`
 - [ ] Hosting in der EU (DSGVO), HTTPS, Backups der Datenbank
 - [ ] Starkes Admin-Passwort; später eigene Logins pro Mitarbeiter
+
+## WhatsApp: Phase 2
+
+Phase 1 enthält den kompletten Ablauf. Für echte WhatsApp-Nachrichten fehlen nur noch zwei kleine Teile:
+
+1. **Webhook** `POST /api/webhooks/whatsapp`: nimmt Nachrichten von der WhatsApp Cloud API (Meta) entgegen und ruft `ChatBookingService.handleIncoming(...)` auf – dieselbe Methode wie der Simulator.
+2. **`WhatsAppCloudGateway`**: eine weitere Umsetzung von `ChatGateway` mit `@Primary`, die Antworten über die Cloud API verschickt.
+
+Voraussetzungen: Meta-Business-Konto, eine für die WhatsApp Business Platform registrierte Nummer und eine öffentliche HTTPS-Adresse für den Webhook.
 
 ## Ideen für später
 

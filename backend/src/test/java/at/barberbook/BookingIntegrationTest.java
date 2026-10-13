@@ -2,6 +2,7 @@ package at.barberbook;
 
 import at.barberbook.booking.BookingDtos.BookingRequest;
 import at.barberbook.booking.BookingService;
+import at.barberbook.chat.ChatBookingService;
 import at.barberbook.common.Exceptions.ConflictException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,6 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.PostgreSQLContainer;
 
+import java.sql.Timestamp;
 import java.time.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -85,6 +87,7 @@ class BookingIntegrationTest {
     @Autowired ObjectMapper json;
     @Autowired JdbcTemplate jdbc;
     @Autowired BookingService booking;
+    @Autowired ChatBookingService chat;
 
     long reza;
     long sami;
@@ -92,7 +95,7 @@ class BookingIntegrationTest {
 
     @BeforeEach
     void cleanAndLookup() {
-        jdbc.execute("TRUNCATE appointment, customer, barber_absence RESTART IDENTITY CASCADE");
+        jdbc.execute("TRUNCATE appointment, customer, barber_absence, chat_message, chat_session RESTART IDENTITY CASCADE");
         reza = jdbc.queryForObject("select id from barber where name = 'Reza'", Long.class);
         sami = jdbc.queryForObject("select id from barber where name = 'Sami'", Long.class);
         haircut = jdbc.queryForObject("select id from service_offering where name = 'Schneiden & Föhnen'", Long.class);
@@ -314,5 +317,94 @@ class BookingIntegrationTest {
 
         mvc.perform(get("/api/admin/services"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // ---- WhatsApp requests (phase 1, via the same service the webhook will use) ------------------
+
+    String say(String phone, String text) {
+        return chat.handleIncoming("mr-artist", phone, null, text).get(0);
+    }
+
+    List<String> freeStarts(long barberId) throws Exception {
+        String res = mvc.perform(get("/api/shops/mr-artist/availability")
+                        .param("serviceId", String.valueOf(haircut)).param("barberId", String.valueOf(barberId))
+                        .param("date", MONDAY.toString()))
+                .andReturn().getResponse().getContentAsString();
+        List<String> starts = new ArrayList<>();
+        for (JsonNode s : json.readTree(res).get("slots")) starts.add(s.get("start").asText());
+        return starts;
+    }
+
+    @Test
+    void whatsapp_request_asks_for_the_service_reserves_the_slot_and_the_barber_confirms() throws Exception {
+        String first = say("0664 1000001", "Amir 11:30 07.01");
+        assertThat(first).contains("Welche Leistung").contains("1  Schneiden & Föhnen");
+
+        String second = say("0664 1000001", "1");
+        assertThat(second).contains("Danke Amir").contains("11:30");
+
+        Long id = jdbc.queryForObject("select id from appointment where status = 'PENDING' and source = 'WHATSAPP'", Long.class);
+        Long barberId = jdbc.queryForObject("select barber_id from appointment where id = ?", Long.class, id);
+        assertThat(freeStarts(barberId)).doesNotContain(vienna(11, 30).toString()); // slot is held
+
+        mvc.perform(get("/api/admin/requests").with(httpBasic("admin", "test-secret")))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].status").value("PENDING"))
+                .andExpect(jsonPath("$[0].source").value("WHATSAPP"))
+                .andExpect(jsonPath("$[0].customerName").value("Amir"));
+
+        mvc.perform(post("/api/admin/appointments/" + id + "/confirm").with(httpBasic("admin", "test-secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+
+        List<ChatBookingService.ChatMessageView> conversation = chat.messages(1L, "0664 1000001");
+        assertThat(conversation).hasSize(5);
+        assertThat(conversation.get(4).text()).startsWith("✅ Bestätigt!").contains("/termin/");
+
+        // deciding twice is not possible
+        mvc.perform(post("/api/admin/appointments/" + id + "/reject").with(httpBasic("admin", "test-secret")))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    void whatsapp_offers_the_closest_free_times_when_the_wish_is_taken() throws Exception {
+        mvc.perform(post("/api/shops/mr-artist/appointments").contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(request(reza, vienna(11, 30), "0660 7000001"))))
+                .andExpect(status().isCreated());
+
+        String reply = say("0664 1000002", "Max 11:30 07.01 bei Reza Schneiden & Föhnen");
+        assertThat(reply).contains("besetzt").contains("10:30, 10:45 oder 12:15");
+
+        String booked = say("0664 1000002", "12:15");
+        assertThat(booked).contains("Danke Max").contains("12:15").contains("Reza");
+    }
+
+    @Test
+    void rejected_and_expired_requests_free_the_slot_again() throws Exception {
+        say("0664 1000003", "Lena 15:00 07.01 Schneiden & Föhnen");
+        Long rejected = jdbc.queryForObject("select id from appointment where status = 'PENDING'", Long.class);
+
+        mvc.perform(post("/api/admin/appointments/" + rejected + "/reject").with(httpBasic("admin", "test-secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+        assertThat(chat.messages(1L, "0664 1000003")).last()
+                .extracting(ChatBookingService.ChatMessageView::text).asString().startsWith("Leider");
+
+        say("0664 1000004", "Tom 16:00 07.01 Schneiden & Föhnen");
+        Long expiring = jdbc.queryForObject("select id from appointment where status = 'PENDING'", Long.class);
+        jdbc.update("update appointment set pending_until = ? where id = ?", Timestamp.from(NOW.minusSeconds(60)), expiring);
+
+        chat.expireRequests();
+
+        assertThat(jdbc.queryForObject("select status from appointment where id = ?", String.class, expiring))
+                .isEqualTo("CANCELLED");
+        assertThat(freeStarts(reza)).contains(vienna(15, 0).toString(), vienna(16, 0).toString());
+    }
+
+    @Test
+    void unclear_messages_get_a_short_explanation() {
+        assertThat(say("0664 1000005", "Hallo")).contains("Schreib einfach deinen Namen, den Tag und die Uhrzeit");
+        assertThat(say("0664 1000005", "morgen")).contains("Um wie viel Uhr");
+        assertThat(say("0664 1000005", "abbrechen")).contains("abgebrochen");
     }
 }

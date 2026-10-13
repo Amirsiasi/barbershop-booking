@@ -55,6 +55,9 @@ app:
     username: ${ADMIN_USERNAME:admin}
     password: ${ADMIN_PASSWORD:}
     shop-slug: ${ADMIN_SHOP_SLUG:mr-artist}
+  chat:
+    request-hold: 2h        # unconfirmed WhatsApp requests keep the slot this long
+    session-timeout: 2h     # a half-finished chat conversation starts over after this
   mail:
     from: ${MAIL_FROM:}             # sender address, must be verified at the mail provider
     reply-to: ${MAIL_REPLY_TO:}     # e.g. the shop's own address, so replies reach the barber

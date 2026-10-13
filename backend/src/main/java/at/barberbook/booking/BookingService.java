@@ -21,6 +21,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -108,6 +109,43 @@ public class BookingService {
         throw new ConflictException(SLOT_TAKEN);
     }
 
+    /**
+     * Reserves a slot as a PENDING request (e.g. from WhatsApp) that the barber still has to confirm.
+     * Uses the same availability check and the same database protection as online bookings.
+     *
+     * @param barberId    a specific barber, or {@code null} for whoever is free
+     * @param phone       already normalised phone number (see {@link #normalizePhone})
+     * @return the reserved appointment, or empty if nobody is free at that time
+     */
+    public Optional<Appointment> reserveRequest(Shop shop, ServiceOffering service, Long barberId, Instant start,
+                                                String firstName, String lastName, String phone,
+                                                BookingSource source, Instant pendingUntil) {
+        LocalDate day = start.atZone(shop.zone()).toLocalDate();
+        Optional<Slot> slot = availability.slots(shop, service, barberId, day).stream()
+                .filter(s -> s.start().equals(start))
+                .findFirst();
+        if (slot.isEmpty()) return Optional.empty();
+
+        List<Long> candidates = barberId != null ? List.of(barberId) : slot.get().barberIds();
+        for (Long candidate : candidates) {
+            try {
+                Appointment saved = tx.execute(status -> {
+                    // returning customers keep the name they gave before
+                    Customer customer = customers.findByShopIdAndPhone(shop.getId(), phone)
+                            .orElseGet(() -> customers.save(new Customer(shop.getId(), firstName, lastName, phone, null)));
+                    Appointment a = Appointment.request(shop.getId(), barbers.getReferenceById(candidate), service,
+                            customer, start, null, clock.instant(), source, pendingUntil);
+                    return appointments.saveAndFlush(a);
+                });
+                log.info("Reserved request {} ({}) for barber {} at {}", saved.getId(), source, candidate, start);
+                return appointments.findWithDetails(saved.getId());
+            } catch (DataIntegrityViolationException ex) {
+                log.info("Slot {} for barber {} was taken concurrently, trying next", start, candidate);
+            }
+        }
+        return Optional.empty();
+    }
+
     public AppointmentView findByToken(UUID token) {
         Appointment a = appointments.findByToken(token).orElseThrow(() -> new NotFoundException("Termin nicht gefunden."));
         return toView(a, shops.findById(a.getShopId()).orElseThrow());
@@ -134,7 +172,7 @@ public class BookingService {
 
     // ---- helpers -------------------------------------------------------------------------
 
-    Shop shop(String slug) {
+    public Shop shop(String slug) {
         return shops.findBySlug(slug).orElseThrow(() -> new NotFoundException("Shop nicht gefunden."));
     }
 
@@ -153,7 +191,7 @@ public class BookingService {
     }
 
     /** "0660 123 45 67" -> "+436601234567", "0049 ..." -> "+49...". Austria is the default country. */
-    static String normalizePhone(String raw) {
+    public static String normalizePhone(String raw) {
         String p = raw.replaceAll("[^+0-9]", "");
         if (p.startsWith("00")) p = "+" + p.substring(2);
         else if (p.startsWith("0")) p = "+43" + p.substring(1);

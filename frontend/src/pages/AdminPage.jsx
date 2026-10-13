@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api.js'
 import { addDays, euro, hhmm, instantFor, isoWeekday, longDate, minutesIn, timeIn, todayIn } from '../lib/time.js'
 import AdminServices from './AdminServices.jsx'
+import AdminRequests from './AdminRequests.jsx'
 import Panel from '../components/Panel.jsx'
 
 const STORAGE_KEY = 'barberbook.admin'
 const HOUR_PX = 96
-const STATUS_LABEL = { CONFIRMED: 'Bestätigt', COMPLETED: 'Erschienen', NO_SHOW: 'Nicht erschienen', CANCELLED: 'Storniert' }
+const STATUS_LABEL = { PENDING: 'Anfrage, unbestätigt', CONFIRMED: 'Bestätigt', COMPLETED: 'Erschienen', NO_SHOW: 'Nicht erschienen', CANCELLED: 'Storniert' }
 
 const readAuth = () => { try { return sessionStorage.getItem(STORAGE_KEY) } catch { return null } }
 const writeAuth = (v) => { try { v ? sessionStorage.setItem(STORAGE_KEY, v) : sessionStorage.removeItem(STORAGE_KEY) } catch { /* private mode */ } }
@@ -26,12 +27,21 @@ export default function AdminPage({ shop }) {
   return <AdminShell auth={auth} me={me} shop={shop} onLogout={logout} />
 }
 
-const TABS = [['kalender', 'Kalender'], ['leistungen', 'Leistungen & Preise']]
+const TABS = [['kalender', 'Kalender'], ['anfragen', 'Anfragen'], ['leistungen', 'Leistungen & Preise']]
 
-/** Top bar with the shop name, the two admin areas and logout. */
+/** Top bar with the shop name, the admin areas (with a counter for open requests) and logout. */
 function AdminShell({ auth, me, shop, onLogout }) {
-  const [tab, setTab] = useState(() => (window.location.hash === '#leistungen' ? 'leistungen' : 'kalender'))
+  const [tab, setTab] = useState(() => TABS.find(([id]) => `#${id}` === window.location.hash)?.[0] || 'kalender')
+  const [openRequests, setOpenRequests] = useState(0)
   const open = (t) => { setTab(t); window.history.replaceState(null, '', t === 'kalender' ? '#' : `#${t}`) }
+
+  // keep the counter fresh on every tab, so a new WhatsApp request is noticed
+  useEffect(() => {
+    const load = () => api.admin.requests(auth).then((r) => setOpenRequests(r.length)).catch(() => {})
+    load()
+    const id = setInterval(load, 30_000)
+    return () => clearInterval(id)
+  }, [auth])
 
   return (
     <div className="admin">
@@ -42,15 +52,16 @@ function AdminShell({ auth, me, shop, onLogout }) {
             {TABS.map(([id, label]) => (
               <button key={id} className="admin-tab" aria-current={tab === id ? 'page' : undefined} onClick={() => open(id)}>
                 {label}
+                {id === 'anfragen' && openRequests > 0 && <span className="tab-count" aria-label={`${openRequests} offen`}>{openRequests}</span>}
               </button>
             ))}
           </nav>
           <button className="link-btn" onClick={onLogout}>Abmelden</button>
         </div>
       </div>
-      {tab === 'kalender'
-        ? <Dashboard auth={auth} me={me} shop={shop} />
-        : <AdminServices auth={auth} />}
+      {tab === 'kalender' && <Dashboard auth={auth} me={me} shop={shop} />}
+      {tab === 'anfragen' && <AdminRequests auth={auth} tz={me.timeZone} onChange={setOpenRequests} />}
+      {tab === 'leistungen' && <AdminServices auth={auth} />}
     </div>
   )
 }
@@ -190,7 +201,7 @@ function Dashboard({ auth, me, shop }) {
                       <button key={a.id} className={`appt appt--${a.status}`} style={{ top, height: Math.max(26, height - 2) }}
                               onClick={() => setSelected(a)}>
                         <strong>{timeIn(a.start, tz)} {a.customerName}</strong>
-                        {a.serviceName}
+                        {a.status === 'PENDING' ? `Anfrage: ${a.serviceName}` : a.serviceName}
                       </button>
                     )
                   })}
@@ -225,8 +236,16 @@ function AppointmentPanel({ appt, tz, onClose, onStatus }) {
         <dt>Telefon</dt><dd><a href={`tel:${appt.phone}`}>{appt.phone}</a></dd>
         {appt.email && <><dt>E-Mail</dt><dd><a href={`mailto:${appt.email}`}>{appt.email}</a></dd></>}
         {appt.note && <><dt>Wunsch</dt><dd>{appt.note}</dd></>}
+        {appt.source === 'WHATSAPP' && <><dt>Über</dt><dd>WhatsApp</dd></>}
+        {appt.status === 'PENDING' && appt.pendingUntil && <><dt>Reserviert bis</dt><dd>{timeIn(appt.pendingUntil, tz)} Uhr</dd></>}
       </dl>
-      {appt.status !== 'CANCELLED' && (
+      {appt.status === 'PENDING' && (
+        <div className="panel__actions">
+          <button className="btn" onClick={() => onStatus(appt, 'CONFIRMED')}>Anfrage bestätigen</button>
+          <button className="btn btn--ghost" onClick={() => onStatus(appt, 'CANCELLED')}>Ablehnen</button>
+        </div>
+      )}
+      {appt.status !== 'CANCELLED' && appt.status !== 'PENDING' && (
         <div className="panel__actions">
           {appt.status !== 'COMPLETED' && <button className="btn" onClick={() => onStatus(appt, 'COMPLETED')}>Ist erschienen</button>}
           {past && appt.status !== 'NO_SHOW' && <button className="btn btn--ghost" onClick={() => onStatus(appt, 'NO_SHOW')}>Nicht erschienen</button>}

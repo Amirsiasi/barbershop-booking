@@ -337,3 +337,65 @@ footer a { color: #d6e2db; }
   .price-list .badge { grid-column: 1; grid-row: 3; justify-self: start; }
   .price-list__edit { grid-column: 2; grid-row: 2 / span 2; }
 }
+
+/* ---------- requests + WhatsApp simulator ---------- */
+.tab-count {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; margin-left: 6px;
+  border-radius: 999px; background: var(--red); color: #fff; font-size: 12px; font-weight: 700;
+}
+.appt--PENDING {
+  background: repeating-linear-gradient(-45deg, #fbf3e3 0 8px, #f6ead2 8px 16px);
+  border-left-color: var(--brass); outline: 1.5px dashed var(--brass); outline-offset: -1.5px;
+}
+.badge--PENDING { background: var(--brass-soft); color: #5e4518; }
+
+.requests-page { display: grid; gap: 40px; }
+.request-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.request-card {
+  display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; gap: 18px; align-items: center;
+  background: var(--paper); border: 1.5px dashed var(--brass); border-radius: var(--r-lg); padding: 16px 18px;
+}
+.request-card__when strong { display: block; font-family: var(--display); font-size: 34px; font-weight: 800; line-height: 1; }
+.request-card__when span { color: var(--muted); font-size: 14px; }
+.request-card__who { display: grid; gap: 2px; }
+.request-card__who span { color: var(--muted); font-size: 14px; }
+.request-card__hold { color: #8a6420 !important; font-weight: 600; }
+.request-card__actions { display: flex; gap: 8px; }
+@media (max-width: 720px) {
+  .request-card { grid-template-columns: 1fr; gap: 10px; }
+  .request-card__actions .btn { flex: 1; }
+}
+
+.simulator__grid { display: grid; gap: 24px; align-items: start; }
+@media (min-width: 860px) { .simulator__grid { grid-template-columns: 400px minmax(0, 1fr); } }
+.phone {
+  border-radius: 28px; overflow: hidden; border: 8px solid var(--green-950); background: #e9e4da;
+  box-shadow: var(--shadow); display: flex; flex-direction: column; height: 560px;
+}
+.phone__head { display: flex; gap: 10px; align-items: center; padding: 12px 14px; background: var(--green); color: var(--porcelain); }
+.phone__head .avatar { width: 38px; height: 38px; font-size: 18px; background: var(--brass); }
+.phone__head strong { display: block; font-size: 15px; }
+.phone__head span { font-size: 12px; color: #c4d5cb; }
+.phone__chat {
+  flex: 1; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 8px;
+  background-image: radial-gradient(rgba(29,58,48,.05) 1px, transparent 1px); background-size: 14px 14px;
+}
+.phone__hint { margin: auto; text-align: center; color: var(--muted); font-size: 14px; max-width: 26ch; }
+.bubble {
+  max-width: 85%; padding: 8px 11px; border-radius: 12px; font-size: 14.5px; line-height: 1.45; white-space: pre-line;
+  box-shadow: 0 1px 0 rgba(0,0,0,.06); overflow-wrap: anywhere;
+}
+.bubble--me { align-self: flex-end; background: #d6efcf; border-bottom-right-radius: 4px; }
+.bubble--shop { align-self: flex-start; background: #fff; border-bottom-left-radius: 4px; }
+.phone__input { display: flex; gap: 8px; padding: 10px; background: #f3f0ea; }
+.phone__input input { flex: 1; min-width: 0; border: 0; border-radius: 999px; padding: 0 16px; min-height: 44px; background: #fff; }
+.phone__input .btn { min-height: 44px; padding: 0 18px; }
+.simulator__side { display: grid; gap: 14px; }
+.simulator__h { margin: 8px 0 0; font-size: 15px; }
+.conversations { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.conversations button {
+  width: 100%; text-align: left; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: 10px 12px; cursor: pointer; display: grid; gap: 2px;
+}
+.conversations button[aria-current='true'] { border-color: var(--green); background: var(--green-100); }
+.conversations span { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

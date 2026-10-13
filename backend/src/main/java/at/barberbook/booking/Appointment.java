@@ -43,6 +43,12 @@ public class Appointment {
     private Instant reminderSentAt;
     private Instant createdAt;
 
+    @Enumerated(EnumType.STRING)
+    private BookingSource source = BookingSource.ONLINE;
+
+    /** Only for PENDING requests: after this moment the slot is released if the barber has not confirmed. */
+    private Instant pendingUntil;
+
     protected Appointment() {
     }
 
@@ -60,14 +66,28 @@ public class Appointment {
         this.createdAt = now;
     }
 
+    /** A request that reserves the slot but still needs the barber's confirmation (e.g. from WhatsApp). */
+    public static Appointment request(Long shopId, Barber barber, ServiceOffering service, Customer customer,
+                                      Instant startsAt, String note, Instant now, BookingSource source,
+                                      Instant pendingUntil) {
+        Appointment a = new Appointment(shopId, barber, service, customer, startsAt, note, now);
+        a.status = AppointmentStatus.PENDING;
+        a.source = source;
+        a.pendingUntil = pendingUntil;
+        return a;
+    }
+
     public void changeStatus(AppointmentStatus newStatus) {
         this.status = newStatus;
+        if (newStatus != AppointmentStatus.PENDING) this.pendingUntil = null;
     }
 
     public void markReminderSent(Instant when) {
         this.reminderSentAt = when;
     }
 
+    public BookingSource getSource() { return source; }
+    public Instant getPendingUntil() { return pendingUntil; }
     public Long getId() { return id; }
     public Long getShopId() { return shopId; }
     public Barber getBarber() { return barber; }

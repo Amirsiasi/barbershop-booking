@@ -3,6 +3,7 @@ package at.barberbook.admin;
 import at.barberbook.booking.Appointment;
 import at.barberbook.booking.AppointmentRepository;
 import at.barberbook.booking.AppointmentStatus;
+import at.barberbook.chat.ChatBookingService;
 import at.barberbook.common.Exceptions.BusinessRuleException;
 import at.barberbook.common.Exceptions.NotFoundException;
 import at.barberbook.shop.*;
@@ -33,7 +34,7 @@ public class AdminController {
 
     public record AdminAppointment(Long id, Instant start, Instant end, String status, Long barberId, String barberName,
                                    String serviceName, int priceCents, String customerName, String phone, String email,
-                                   String note) {
+                                   String note, String source, Instant pendingUntil) {
     }
 
     public record AbsenceView(Long id, Long barberId, Instant start, Instant end, String reason) {
@@ -54,14 +55,17 @@ public class AdminController {
     private final BarberRepository barbers;
     private final AppointmentRepository appointments;
     private final BarberAbsenceRepository absences;
+    private final ChatBookingService chat;
 
     public AdminController(AdminProperties props, ShopRepository shops, BarberRepository barbers,
-                           AppointmentRepository appointments, BarberAbsenceRepository absences) {
+                           AppointmentRepository appointments, BarberAbsenceRepository absences,
+                           ChatBookingService chat) {
         this.props = props;
         this.shops = shops;
         this.barbers = barbers;
         this.appointments = appointments;
         this.absences = absences;
+        this.chat = chat;
     }
 
     @GetMapping("/me")
@@ -93,6 +97,15 @@ public class AdminController {
         Appointment a = appointments.findById(id)
                 .filter(x -> x.getShopId().equals(shop().getId()))
                 .orElseThrow(() -> new NotFoundException("Termin nicht gefunden."));
+        if (a.getStatus() == AppointmentStatus.PENDING) {
+            // a request: the customer must be told about the decision
+            if (change.status() == AppointmentStatus.CONFIRMED) return toAdmin(chat.confirm(a.getShopId(), id));
+            if (change.status() == AppointmentStatus.CANCELLED) return toAdmin(chat.reject(a.getShopId(), id));
+            throw new BusinessRuleException("Eine Anfrage kann nur bestätigt oder abgelehnt werden.");
+        }
+        if (change.status() == AppointmentStatus.PENDING) {
+            throw new BusinessRuleException("Ein Termin kann nicht zurück auf „angefragt“ gesetzt werden.");
+        }
         if (a.getStatus() == AppointmentStatus.CANCELLED && change.status().blocksTime()) {
             // re-activating could collide with a newer booking; the DB constraint would reject it anyway
             throw new BusinessRuleException("Ein stornierter Termin kann nicht reaktiviert werden. Bitte neu buchen.");
@@ -100,6 +113,23 @@ public class AdminController {
         a.changeStatus(change.status());
         appointments.flush();
         return toAdmin(a);
+    }
+
+    /** Open requests (e.g. from WhatsApp) that wait for the barber's decision, soonest first. */
+    @GetMapping("/requests")
+    @Transactional(readOnly = true)
+    public List<AdminAppointment> requests() {
+        return appointments.findPending(shop().getId()).stream().map(AdminController::toAdmin).toList();
+    }
+
+    @PostMapping("/appointments/{id}/confirm")
+    public AdminAppointment confirm(@PathVariable Long id) {
+        return toAdmin(chat.confirm(shop().getId(), id));
+    }
+
+    @PostMapping("/appointments/{id}/reject")
+    public AdminAppointment reject(@PathVariable Long id) {
+        return toAdmin(chat.reject(shop().getId(), id));
     }
 
     @PostMapping("/absences")
@@ -137,6 +167,7 @@ public class AdminController {
     private static AdminAppointment toAdmin(Appointment a) {
         return new AdminAppointment(a.getId(), a.getStartsAt(), a.getEndsAt(), a.getStatus().name(),
                 a.getBarber().getId(), a.getBarber().getName(), a.getService().getName(), a.getPriceCents(),
-                a.getCustomer().fullName(), a.getCustomer().getPhone(), a.getCustomer().getEmail(), a.getNote());
+                a.getCustomer().fullName().trim(), a.getCustomer().getPhone(), a.getCustomer().getEmail(), a.getNote(),
+                a.getSource().name(), a.getPendingUntil());
     }
 }

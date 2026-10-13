@@ -1,6 +1,8 @@
 package at.barberbook.booking;
 
 public enum AppointmentStatus {
+    /** Requested (e.g. via WhatsApp), slot is reserved, barber has not confirmed yet. */
+    PENDING,
     CONFIRMED,
     CANCELLED,
     COMPLETED,
@@ -8,6 +10,6 @@ public enum AppointmentStatus {
 
     /** Statuses that occupy the barber's time (mirrors the WHERE clause of the DB exclusion constraint). */
     public boolean blocksTime() {
-        return this == CONFIRMED || this == COMPLETED;
+        return this == PENDING || this == CONFIRMED || this == COMPLETED;
     }
 }
