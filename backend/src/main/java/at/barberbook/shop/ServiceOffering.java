@@ -31,6 +31,21 @@ public class ServiceOffering {
         this.priceCents = priceCents;
     }
 
+    /**
+     * Changes take effect for new bookings only: existing appointments keep the price
+     * and end time they were booked with (stored on the appointment itself).
+     */
+    public void update(String category, String name, String description, int durationMinutes,
+                       int priceCents, boolean active, int sortOrder) {
+        this.category = category;
+        this.name = name;
+        this.description = description;
+        this.durationMinutes = durationMinutes;
+        this.priceCents = priceCents;
+        this.active = active;
+        this.sortOrder = sortOrder;
+    }
+
     public Long getId() { return id; }
     public Long getShopId() { return shopId; }
     public String getCategory() { return category; }

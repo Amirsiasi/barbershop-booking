@@ -243,4 +243,76 @@ class BookingIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.appointments").isArray());
     }
+
+    // ---- admin price list ----------------------------------------------------------------------
+
+    String serviceJson(String name, int duration, int priceCents, boolean active) {
+        return """
+                {"category": "Herren", "name": "%s", "description": null,
+                 "durationMinutes": %d, "priceCents": %d, "active": %b}
+                """.formatted(name, duration, priceCents, active);
+    }
+
+    @Test
+    void new_price_applies_to_new_bookings_but_not_to_existing_ones() throws Exception {
+        try {
+            String first = mvc.perform(post("/api/shops/mr-artist/appointments").contentType(MediaType.APPLICATION_JSON)
+                            .content(json.writeValueAsString(request(reza, vienna(10, 0), "0660 6000001"))))
+                    .andExpect(status().isCreated())
+                    .andReturn().getResponse().getContentAsString();
+            String token = json.readTree(first).get("manageToken").asText();
+
+            mvc.perform(put("/api/admin/services/" + haircut).with(httpBasic("admin", "test-secret"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(serviceJson("Schneiden & Föhnen", 35, 3000, true)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.priceCents").value(3000));
+
+            mvc.perform(get("/api/shops/mr-artist"))
+                    .andExpect(jsonPath("$.services[?(@.id == " + haircut + ")].priceCents").value(3000));
+
+            // the appointment booked before the change keeps its price
+            mvc.perform(get("/api/appointments/" + token))
+                    .andExpect(jsonPath("$.priceCents").value(2800));
+
+            mvc.perform(post("/api/shops/mr-artist/appointments").contentType(MediaType.APPLICATION_JSON)
+                            .content(json.writeValueAsString(request(sami, vienna(10, 0), "0660 6000002"))))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.priceCents").value(3000));
+        } finally {
+            jdbc.update("update service_offering set price_cents = 2800 where id = ?", haircut);
+        }
+    }
+
+    @Test
+    void hidden_services_are_listed_for_the_admin_but_not_bookable() throws Exception {
+        String created = mvc.perform(post("/api/admin/services").with(httpBasic("admin", "test-secret"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(serviceJson("Kopfmassage extra", 15, 1200, false)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        long id = json.readTree(created).get("id").asLong();
+
+        mvc.perform(get("/api/admin/services").with(httpBasic("admin", "test-secret")))
+                .andExpect(jsonPath("$[?(@.id == " + id + ")].active").value(false));
+
+        mvc.perform(get("/api/shops/mr-artist"))
+                .andExpect(jsonPath("$.services[?(@.id == " + id + ")]").isEmpty());
+
+        mvc.perform(get("/api/shops/mr-artist/availability")
+                        .param("serviceId", String.valueOf(id)).param("date", MONDAY.toString()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void invalid_price_list_entries_are_rejected() throws Exception {
+        mvc.perform(post("/api/admin/services").with(httpBasic("admin", "test-secret"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(serviceJson("", 2, -100, true)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.validationErrors.length()").value(3));
+
+        mvc.perform(get("/api/admin/services"))
+                .andExpect(status().isUnauthorized());
+    }
 }

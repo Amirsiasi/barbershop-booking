@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api.js'
 import { addDays, euro, hhmm, instantFor, isoWeekday, longDate, minutesIn, timeIn, todayIn } from '../lib/time.js'
+import AdminServices from './AdminServices.jsx'
+import Panel from '../components/Panel.jsx'
 
 const STORAGE_KEY = 'barberbook.admin'
 const HOUR_PX = 96
@@ -21,7 +23,36 @@ export default function AdminPage({ shop }) {
   const logout = () => { writeAuth(null); setAuth(null); setMe(null) }
 
   if (!auth || !me) return <Login onLogin={(a, m) => { writeAuth(a); setAuth(a); setMe(m) }} />
-  return <Dashboard auth={auth} me={me} shop={shop} onLogout={logout} />
+  return <AdminShell auth={auth} me={me} shop={shop} onLogout={logout} />
+}
+
+const TABS = [['kalender', 'Kalender'], ['leistungen', 'Leistungen & Preise']]
+
+/** Top bar with the shop name, the two admin areas and logout. */
+function AdminShell({ auth, me, shop, onLogout }) {
+  const [tab, setTab] = useState(() => (window.location.hash === '#leistungen' ? 'leistungen' : 'kalender'))
+  const open = (t) => { setTab(t); window.history.replaceState(null, '', t === 'kalender' ? '#' : `#${t}`) }
+
+  return (
+    <div className="admin">
+      <div className="admin-bar">
+        <div className="wrap">
+          <strong>{me.shopName}</strong>
+          <nav className="admin-tabs" aria-label="Bereiche">
+            {TABS.map(([id, label]) => (
+              <button key={id} className="admin-tab" aria-current={tab === id ? 'page' : undefined} onClick={() => open(id)}>
+                {label}
+              </button>
+            ))}
+          </nav>
+          <button className="link-btn" onClick={onLogout}>Abmelden</button>
+        </div>
+      </div>
+      {tab === 'kalender'
+        ? <Dashboard auth={auth} me={me} shop={shop} />
+        : <AdminServices auth={auth} />}
+    </div>
+  )
 }
 
 function Login({ onLogin }) {
@@ -65,7 +96,7 @@ function Login({ onLogin }) {
   )
 }
 
-function Dashboard({ auth, me, shop, onLogout }) {
+function Dashboard({ auth, me, shop }) {
   const tz = me.timeZone
   const [date, setDate] = useState(() => todayIn(tz))
   const [day, setDay] = useState(null)
@@ -105,14 +136,7 @@ function Dashboard({ auth, me, shop, onLogout }) {
   }
 
   return (
-    <div className="admin">
-      <div className="admin-bar">
-        <div className="wrap">
-          <strong>{me.shopName}</strong>
-          <button className="link-btn" onClick={onLogout}>Abmelden</button>
-        </div>
-      </div>
-
+    <>
       <main className="wrap" style={{ paddingBottom: 48 }}>
         <div className="daynav">
           <h1>{isToday ? 'Heute' : longDate(date)}</h1>
@@ -182,30 +206,11 @@ function Dashboard({ auth, me, shop, onLogout }) {
         <BlockPanel me={me} date={date} tz={tz} onClose={() => setBlocking(false)}
                     onSave={async (payload) => { await api.admin.block(auth, payload); setBlocking(false); load() }} />
       )}
-    </div>
+    </>
   )
 }
 
 const minutesOf = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5))
-
-function Panel({ title, onClose, children }) {
-  useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-  return (
-    <div className="panel-backdrop" onClick={onClose}>
-      <div className="panel" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 12 }}>
-          <h2>{title}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Schließen">×</button>
-        </div>
-        {children}
-      </div>
-    </div>
-  )
-}
 
 function AppointmentPanel({ appt, tz, onClose, onStatus }) {
   const past = new Date(appt.start) < new Date()

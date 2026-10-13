@@ -58,7 +58,7 @@ public class ShopController {
                 services.findByShopIdAndActiveTrueOrderBySortOrder(s.getId()).stream()
                         .map(v -> new ServiceView(v.getId(), v.getCategory(), v.getName(), v.getDescription(),
                                 v.getDurationMinutes(), v.getPriceCents())).toList());
-        // shop data rarely changes - let browsers cache it briefly
-        return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofMinutes(5)).cachePublic()).body(view);
+        // short browser cache: price changes from the admin area show up within half a minute
+        return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofSeconds(30)).cachePublic()).body(view);
     }
 }

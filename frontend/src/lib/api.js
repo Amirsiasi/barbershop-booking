@@ -46,5 +46,8 @@ export const api = {
     setStatus: (auth, id, status) => request(`/admin/appointments/${id}`, { method: 'PATCH', body: { status }, auth }),
     block: (auth, payload) => request('/admin/absences', { method: 'POST', body: payload, auth }),
     unblock: (auth, id) => request(`/admin/absences/${id}`, { method: 'DELETE', auth }),
+    services: (auth) => request('/admin/services', { auth }),
+    createService: (auth, form) => request('/admin/services', { method: 'POST', body: form, auth }),
+    updateService: (auth, id, form) => request(`/admin/services/${id}`, { method: 'PUT', body: form, auth }),
   },
 }

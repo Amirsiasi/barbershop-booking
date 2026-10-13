@@ -22,6 +22,7 @@ Entstanden aus meinem Projekt [customer-crud-spring-react](https://github.com/Am
 - Termine als „erschienen“, „nicht erschienen“ oder „storniert“ markieren, Telefonnummer direkt anrufen
 - Zeit blockieren (Pause, Urlaub, Arzttermin) – in der Zeit kann niemand online buchen
 - Kennzahlen des Tages: Termine, erwarteter Umsatz, Stornos
+- **Leistungen & Preise:** Preise, Dauer, Namen und Beschreibungen ändern, neue Leistungen anlegen, Leistungen ausblenden. Bereits gebuchte Termine behalten ihren Preis.
 
 ![Buchung](docs/screenshots/booking.png)
 ![Admin-Kalender](docs/screenshots/admin.png)
@@ -131,6 +132,8 @@ Bei jedem Push auf GitHub laufen über **GitHub Actions** ([`.github/workflows/c
 | GET | `/api/admin/day?date` | Tagesansicht (Login) |
 | PATCH | `/api/admin/appointments/{id}` | Status ändern (Login) |
 | POST / DELETE | `/api/admin/absences` | Zeit blockieren / freigeben (Login) |
+| GET / POST | `/api/admin/services` | Preisliste inkl. ausgeblendeter Leistungen / neue Leistung (Login) |
+| PUT | `/api/admin/services/{id}` | Preis, Dauer, Name ändern oder ausblenden (Login) |
 
 Fehler kommen immer im gleichen Format (`ApiError` mit `validationErrors` pro Feld) – übernommen aus customer-crud-spring-react.
 

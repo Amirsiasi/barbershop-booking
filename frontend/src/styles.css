@@ -301,3 +301,39 @@ footer a { color: #d6e2db; }
 .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--green-100); color: var(--green); }
 .badge--CANCELLED { background: #ececea; color: var(--muted); }
 .badge--NO_SHOW { background: var(--red-soft); color: #7d1f18; }
+
+/* ---------- admin tabs + price list ---------- */
+.admin-bar .wrap { flex-wrap: wrap; }
+.admin-tabs { display: flex; gap: 4px; margin-right: auto; margin-left: 24px; }
+.admin-tab {
+  background: none; border: 0; color: #b9cbc1; font-weight: 600; padding: 8px 14px; border-radius: 999px; cursor: pointer;
+}
+.admin-tab:hover { color: var(--porcelain); background: rgba(255,255,255,.06); }
+.admin-tab[aria-current='page'] { background: var(--porcelain); color: var(--green-950); }
+@media (max-width: 640px) {
+  .admin-tabs { order: 3; width: 100%; margin: 4px 0 0; }
+}
+.alert--ok { background: var(--green-100); color: var(--green); }
+
+.price-group { margin-top: 28px; }
+.price-group h2 { font-family: var(--display); font-weight: 800; font-size: 26px; margin: 0 0 10px; }
+.price-list { list-style: none; margin: 0; padding: 0; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+.price-list li {
+  display: grid; grid-template-columns: minmax(0, 1fr) 120px 80px 130px auto; gap: 16px; align-items: center;
+  padding: 14px 18px; border-top: 1px solid var(--line);
+}
+.price-list li:first-child { border-top: 0; }
+.price-list li.is-hidden { background: repeating-linear-gradient(-45deg, #f6f7f5 0 8px, #f1f3f0 8px 16px); }
+.price-list li.is-hidden .price-list__main, .price-list li.is-hidden .price-list__price { opacity: .55; }
+.price-list__main strong { display: block; }
+.price-list__main span { display: block; color: var(--muted); font-size: 14px; }
+.price-list__duration { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.price-list__price { font-family: var(--display); font-weight: 800; font-size: 24px; text-align: right; font-variant-numeric: tabular-nums; }
+.price-list__edit { min-height: 40px; padding: 0 16px; }
+@media (max-width: 720px) {
+  .price-list li { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; }
+  .price-list__duration { grid-column: 1; grid-row: 2; }
+  .price-list__price { grid-column: 2; grid-row: 1; }
+  .price-list .badge { grid-column: 1; grid-row: 3; justify-self: start; }
+  .price-list__edit { grid-column: 2; grid-row: 2 / span 2; }
+}
