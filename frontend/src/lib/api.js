@@ -77,6 +77,7 @@ export const api = {
     services: (auth) => request('/admin/services', { auth }),
     createService: (auth, form) => request('/admin/services', { method: 'POST', body: form, auth }),
     updateService: (auth, id, form) => request(`/admin/services/${id}`, { method: 'PUT', body: form, auth }),
+    stats: (auth, unit, end, barberId) => request('/admin/stats' + q({ unit, end, barberId }), { auth }),
     shopSettings: (auth) => request('/admin/shop', { auth }),
     saveRating: (auth, rating, reviewCount) => request('/admin/shop/rating', { method: 'PUT', body: { rating, reviewCount }, auth }),
     uploadPhoto: (auth, blob) => request('/admin/shop/photo', { method: 'PUT', raw: blob, auth }),
