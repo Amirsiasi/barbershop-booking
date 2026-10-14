@@ -15,9 +15,11 @@ import Panel from '../components/Panel.jsx'
 export const STATUS_LABEL = { PENDING: 'Anfrage, unbestätigt', CONFIRMED: 'Bestätigt', COMPLETED: 'Erschienen', NO_SHOW: 'Nicht erschienen', CANCELLED: 'Storniert' }
 
 // soft fill + strong edge per barber, taken from the shop palette (green, brass, pole red, ...)
+// light fill + strong edge per barber. The edges are a colour-blind-checked palette (also used in the statistics),
+// so a barber has the same colour everywhere
 const COLORS = [
-  ['#d6ebe1', '#2f7a5f'], ['#f2e5c9', '#a8792c'], ['#f6dcd7', '#c0392f'],
-  ['#dce6f2', '#3e6996'], ['#e8def0', '#7a5a9c'], ['#d6edee', '#2b7c83'],
+  ['#d3ecdf', '#1a8a55'], ['#d7e6f8', '#2a78d6'], ['#fbe8cc', '#e08a10'],
+  ['#f7dbe6', '#d55181'], ['#e0dcf7', '#6250d6'], ['#f5d8d5', '#c23b30'],
 ]
 const VIEWS = [['day', 'Tag', 1], ['3', '3 Tage', 3], ['week', 'Woche', 7]]
 const VIEW_KEY = 'barberbook.calendar'
@@ -28,6 +30,12 @@ const writePrefs = (v) => { try { localStorage.setItem(VIEW_KEY, JSON.stringify(
 const toMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5))
 const hhmmOf = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
 const mondayOf = (iso) => addDays(iso, 1 - isoWeekday(iso))
+
+/** Strong colour of a barber, by his position in the team list (same order in calendar and statistics). */
+export const barberColor = (barbers, barberId) => {
+  const i = barbers.findIndex((b) => b.id === barberId)
+  return COLORS[(i < 0 ? 0 : i) % COLORS.length][1]
+}
 
 export default function AdminCalendar({ auth, me, shop }) {
   const tz = me.timeZone

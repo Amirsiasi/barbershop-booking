@@ -38,6 +38,7 @@ Entstanden aus meinem Projekt [customer-crud-spring-react](https://github.com/Am
 - **Anfragen:** offene WhatsApp-Anfragen mit Zähler im Menü, Bestätigen/Ablehnen, WhatsApp-Simulator mit allen Unterhaltungen
 - **Team:** Barber hinzufügen, bearbeiten und entfernen. Mit kommenden Terminen geht Entfernen nicht (erst umbuchen oder stornieren), mit alten Terminen wird der Barber nur ausgeblendet und kann wieder aktiviert werden.
 - **Leistungen & Preise:** Preise, Dauer, Namen und Beschreibungen ändern, neue Leistungen anlegen, Leistungen ausblenden. Bereits gebuchte Termine behalten ihren Preis.
+- **Statistik** (nur Inhaber): Umsatz, Termine, Ø pro Termin, Neukunden, Storno- und No-Show-Quote, jeweils mit Vergleich zum Zeitraum davor. Diagramme pro **Woche** (12), **Monat** (12) oder **Jahr** (5), zurückblättern, Filter pro Barber, Umsatz pro Barber, beliebteste Leistungen, woher die Termine kommen (online, WhatsApp, eingetragen), alles auch als Tabelle.
 - **Shop-Auftritt:** Foto vom Shop hochladen (wird im Browser verkleinert, nur JPG/PNG/WebP) und die Bewertung (z. B. aus Google) eintragen. Beides erscheint in der Zusammenfassung der Buchungsseite.
 
 ![Buchung](docs/screenshots/booking.png)
@@ -152,6 +153,7 @@ Bei jedem Push auf GitHub laufen über **GitHub Actions** ([`.github/workflows/c
 | POST / DELETE | `/api/admin/absences` | Zeit blockieren / freigeben (Login) |
 | GET / POST | `/api/admin/services` | Preisliste inkl. ausgeblendeter Leistungen / neue Leistung (Login) |
 | PUT | `/api/admin/services/{id}` | Preis, Dauer, Name ändern oder ausblenden (Login) |
+| GET | `/api/admin/stats?unit=week\|month\|year&end&barberId` | Statistik (Inhaber) |
 | GET · PUT `/rating` · PUT/DELETE `/photo` | `/api/admin/shop` | Shop-Foto und Bewertung (Inhaber) |
 | GET | `/api/admin/me` · POST `/api/admin/me/password` | Eigenes Konto, Passwort ändern (Login) |
 | GET / POST | `/api/admin/staff` | Logins des Teams / Login anlegen (Inhaber) |

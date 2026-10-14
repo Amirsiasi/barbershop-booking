@@ -3,6 +3,7 @@ import { api } from '../lib/api.js'
 import AdminServices from './AdminServices.jsx'
 import AdminCalendar from './AdminCalendar.jsx'
 import AdminShop from './AdminShop.jsx'
+import AdminStats from './AdminStats.jsx'
 import AdminRequests from './AdminRequests.jsx'
 import AdminTeam from './AdminTeam.jsx'
 import Panel from '../components/Panel.jsx'
@@ -50,7 +51,7 @@ export default function AdminPage({ shop }) {
                      onPasswordChanged={(pw) => applyAuth(basicAuth(me.username, pw), me)} />
 }
 
-const ALL_TABS = [['kalender', 'Kalender'], ['anfragen', 'Anfragen'], ['team', 'Team'], ['leistungen', 'Leistungen & Preise'], ['shop', 'Shop-Auftritt']]
+const ALL_TABS = [['kalender', 'Kalender'], ['anfragen', 'Anfragen'], ['team', 'Team'], ['leistungen', 'Leistungen & Preise'], ['statistik', 'Statistik'], ['shop', 'Shop-Auftritt']]
 const BARBER_TABS = ['kalender', 'anfragen']
 const ROLE_LABEL = { OWNER: 'Inhaber', BARBER: 'Barber' }
 
@@ -95,6 +96,7 @@ function AdminShell({ auth, me, shop, onLogout, onTeamChange, onPasswordChanged 
       {tab === 'anfragen' && <AdminRequests auth={auth} tz={me.timeZone} onChange={setOpenRequests} isOwner={isOwner} />}
       {tab === 'team' && isOwner && <AdminTeam auth={auth} me={me} onChange={onTeamChange} />}
       {tab === 'leistungen' && isOwner && <AdminServices auth={auth} />}
+      {tab === 'statistik' && isOwner && <AdminStats auth={auth} me={me} />}
       {tab === 'shop' && isOwner && <AdminShop auth={auth} shop={shop} />}
 
       {account && (
