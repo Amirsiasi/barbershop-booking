@@ -26,21 +26,8 @@ export default function ShopInfo({ shop }) {
             </tbody>
           </table>
         </div>
-        <div>
-          <h2>Gut zu wissen</h2>
-          <ul className="highlights">
-            {shop.highlights.map((h) => <li key={h}>{h}</li>)}
-          </ul>
-        </div>
-        <div>
-          <h2>So findest du uns</h2>
-          <p style={{ margin: '0 0 16px' }}>
-            {shop.name}<br />
-            {shop.street}<br />
-            {shop.zipCity}
-            {shop.phone && <><br /><a href={`tel:${shop.phone}`}>{shop.phone}</a></>}
-          </p>
-          <a className="btn btn--ghost" href={mapsUrl} target="_blank" rel="noreferrer">Route in Google Maps</a>
+        <div className="info__route">
+          <a className="btn" href={mapsUrl} target="_blank" rel="noreferrer">Route zum Barbershop</a>
         </div>
       </div>
     </section>

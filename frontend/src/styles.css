@@ -235,8 +235,8 @@ a { color: var(--green-700); }
 
 /* ---------- info section ---------- */
 .info { background: var(--paper); border-top: 1px solid var(--line); padding: 56px 0; }
-.info__grid { display: grid; gap: 40px; }
-@media (min-width: 800px) { .info__grid { grid-template-columns: 1fr 1fr 1fr; } }
+.info__grid { display: grid; gap: 24px; }
+.info__grid > * { max-width: 460px; }
 .info h2 { font-family: var(--display); font-weight: 800; font-size: 30px; margin: 0 0 14px; }
 .hours { width: 100%; border-collapse: collapse; }
 .hours td { padding: 8px 0; border-bottom: 1px solid var(--line); }
