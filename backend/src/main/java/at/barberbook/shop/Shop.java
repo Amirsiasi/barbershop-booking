@@ -25,6 +25,9 @@ public class Shop {
     private String highlights;
 
     /** Shown in the booking summary; maintained by the owner (e.g. copied from Google). */
+    private String instagram;
+    private String whatsapp;
+
     private java.math.BigDecimal rating;
     private Integer reviewCount;
 
@@ -40,6 +43,17 @@ public class Shop {
     public String getPhone() { return phone; }
     public String getEmail() { return email; }
     public String getTimeZone() { return timeZone; }
+
+    public String getInstagram() { return instagram; }
+    public String getWhatsapp() { return whatsapp; }
+
+    /** Footer contact data. Empty values hide the link on the website. */
+    public void updateContact(String phone, String email, String instagram, String whatsapp) {
+        this.phone = phone;
+        this.email = email;
+        this.instagram = instagram;
+        this.whatsapp = whatsapp;
+    }
 
     public java.math.BigDecimal getRating() { return rating; }
     public Integer getReviewCount() { return reviewCount; }

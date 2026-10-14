@@ -1,5 +1,6 @@
 package at.barberbook.admin;
 
+import at.barberbook.booking.BookingService;
 import at.barberbook.common.Exceptions.BusinessRuleException;
 import at.barberbook.common.Exceptions.NotFoundException;
 import at.barberbook.shop.Shop;
@@ -14,6 +15,9 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -33,7 +37,17 @@ public class AdminShopController {
 
     static final int MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 
-    public record ShopSettings(BigDecimal rating, Integer reviewCount, String photoUrl) {
+    public record ShopSettings(BigDecimal rating, Integer reviewCount, String photoUrl,
+                               String phone, String email, String instagram, String whatsapp) {
+    }
+
+    /** Contact data for the footer. Every field is optional: an empty one is simply not shown. */
+    public record ContactForm(
+            @Pattern(regexp = "^$|^[+0-9 ()/-]{6,25}$", message = "Bitte gib eine gültige Telefonnummer ein.") String phone,
+            @Email(message = "Bitte gib eine gültige E-Mail-Adresse ein.") @Size(max = 120) String email,
+            @Pattern(regexp = "^$|^(https?://(www\\.)?instagram\\.com/)?@?[A-Za-z0-9._]{1,30}/?$",
+                    message = "Bitte gib den Instagram-Namen ein, z. B. mrartist.barbershop") String instagram,
+            @Pattern(regexp = "^$|^[+0-9 ()/-]{6,25}$", message = "Bitte gib eine gültige WhatsApp-Nummer ein.") String whatsapp) {
     }
 
     public record RatingForm(
@@ -60,6 +74,27 @@ public class AdminShopController {
     @Transactional(readOnly = true)
     public ShopSettings get() {
         return view(current.shop());
+    }
+
+    @PutMapping("/contact")
+    @Transactional
+    public ShopSettings contact(@Valid @RequestBody ContactForm form) {
+        Shop shop = shops.findById(current.shop().getId()).orElseThrow();
+        shop.updateContact(blank(form.phone()), blank(form.email()), instagramHandle(form.instagram()),
+                blank(form.whatsapp()) == null ? null : BookingService.normalizePhone(form.whatsapp()));
+        return view(shop);
+    }
+
+    /** "https://instagram.com/mr.artist/", "@mr.artist" or "mr.artist" -> "mr.artist". */
+    static String instagramHandle(String raw) {
+        String s = blank(raw);
+        if (s == null) return null;
+        s = s.replaceFirst("^https?://(www\\.)?instagram\\.com/", "").replaceFirst("^@", "").replaceFirst("/$", "");
+        return s.isEmpty() ? null : s;
+    }
+
+    private static String blank(String s) {
+        return s == null || s.isBlank() ? null : s.trim();
     }
 
     @PutMapping("/rating")
@@ -108,7 +143,8 @@ public class AdminShopController {
         String url = photos.findUpdatedAt(shop.getId())
                 .map(at -> "/api/shops/" + shop.getSlug() + "/photo?v=" + at.toEpochMilli())
                 .orElse(null);
-        return new ShopSettings(shop.getRating(), shop.getReviewCount(), url);
+        return new ShopSettings(shop.getRating(), shop.getReviewCount(), url,
+                shop.getPhone(), shop.getEmail(), shop.getInstagram(), shop.getWhatsapp());
     }
 
     private static byte[] readLimited(InputStream in) throws IOException {

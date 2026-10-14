@@ -97,7 +97,7 @@ class BookingIntegrationTest {
     @BeforeEach
     void cleanAndLookup() {
         jdbc.execute("TRUNCATE appointment, appointment_item, customer, barber_absence, chat_message, chat_session, staff_user, shop_photo RESTART IDENTITY CASCADE");
-        jdbc.update("update shop set rating = null, review_count = null");
+        jdbc.update("update shop set rating = null, review_count = null, phone = null, email = null, instagram = null, whatsapp = null");
         reza = jdbc.queryForObject("select id from barber where name = 'Reza'", Long.class);
         sami = jdbc.queryForObject("select id from barber where name = 'Sami'", Long.class);
         haircut = jdbc.queryForObject("select id from service_offering where name = 'Schneiden & Föhnen'", Long.class);
@@ -772,5 +772,33 @@ class BookingIntegrationTest {
 
         createLogin(sami, "sami", "start1234", "BARBER", true);
         mvc.perform(get("/api/admin/stats").with(httpBasic("sami", "start1234"))).andExpect(status().isForbidden());
+    }
+
+    // ---- footer contact data ---------------------------------------------------------------------
+
+    @Test
+    void the_owner_sets_instagram_whatsapp_and_email_for_the_footer() throws Exception {
+        mvc.perform(put("/api/admin/shop/contact").with(httpBasic("admin", "test-secret")).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"phone": "01 234 56 78", "email": "hallo@mrartist.at",
+                                 "instagram": "https://www.instagram.com/mr.artist.wien/", "whatsapp": "0660 123 45 67"}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.instagram").value("mr.artist.wien"))
+                .andExpect(jsonPath("$.whatsapp").value("+436601234567"));
+
+        mvc.perform(get("/api/shops/mr-artist"))
+                .andExpect(jsonPath("$.instagram").value("mr.artist.wien"))
+                .andExpect(jsonPath("$.whatsapp").value("+436601234567"))
+                .andExpect(jsonPath("$.email").value("hallo@mrartist.at"));
+
+        // empty fields hide the link again
+        mvc.perform(put("/api/admin/shop/contact").with(httpBasic("admin", "test-secret")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"instagram\": \"\", \"whatsapp\": \"\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.instagram").value(org.hamcrest.Matchers.nullValue()));
+
+        mvc.perform(put("/api/admin/shop/contact").with(httpBasic("admin", "test-secret")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"instagram\": \"<script>\", \"email\": \"kein-mail\"}"))
+                .andExpect(status().isBadRequest());
     }
 }

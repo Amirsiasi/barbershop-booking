@@ -30,6 +30,7 @@ public class ShopController {
 
     public record ShopView(String slug, String name, String tagline, String street, String zipCity, String phone,
                            String email, String timeZone, List<String> highlights,
+                           String instagram, String whatsapp,
                            java.math.BigDecimal rating, Integer reviewCount, String photoUrl,
                            List<HoursView> openingHours,
                            List<BarberView> barbers, List<ServiceView> services) {
@@ -56,6 +57,7 @@ public class ShopController {
         Shop s = shops.findBySlug(slug).orElseThrow(() -> new NotFoundException("Shop nicht gefunden."));
         ShopView view = new ShopView(s.getSlug(), s.getName(), s.getTagline(), s.getStreet(), s.getZipCity(),
                 s.getPhone(), s.getEmail(), s.getTimeZone(), s.highlightList(),
+                s.getInstagram(), s.getWhatsapp(),
                 s.getRating(), s.getReviewCount(), photoUrl(s),
                 hours.findByShopIdOrderByDayOfWeek(s.getId()).stream()
                         .map(h -> new HoursView(h.getDayOfWeek(), h.getOpenTime(), h.getCloseTime())).toList(),

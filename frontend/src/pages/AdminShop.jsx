@@ -35,6 +35,7 @@ export default function AdminShop({ auth, shop }) {
   const [settings, setSettings] = useState(null)
   const [rating, setRating] = useState('')
   const [count, setCount] = useState('')
+  const [contact, setContact] = useState({ phone: '', email: '', instagram: '', whatsapp: '' })
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -44,6 +45,7 @@ export default function AdminShop({ auth, shop }) {
     setSettings(s)
     setRating(ratingToInput(s.rating))
     setCount(s.reviewCount == null ? '' : String(s.reviewCount))
+    setContact({ phone: s.phone || '', email: s.email || '', instagram: s.instagram ? `@${s.instagram}` : '', whatsapp: s.whatsapp || '' })
   }
   useEffect(() => { api.admin.shopSettings(auth).then(apply).catch((e) => setError(e.message)) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -77,13 +79,19 @@ export default function AdminShop({ auth, shop }) {
     run(() => api.admin.saveRating(auth, r === null ? null : Math.round(r * 10) / 10, c), 'Bewertung gespeichert.')
   }
 
+  const saveContact = (e) => {
+    e.preventDefault()
+    run(() => api.admin.saveContact(auth, contact), 'Kontaktdaten gespeichert.')
+  }
+  const setC = (k) => (e) => setContact({ ...contact, [k]: e.target.value })
+
   const preview = settings && { ...shop, rating: settings.rating, reviewCount: settings.reviewCount, photoUrl: settings.photoUrl }
 
   return (
     <main className="wrap" style={{ paddingBottom: 48 }}>
       <div className="daynav"><h1>Shop-Auftritt</h1></div>
       <p className="section-sub" style={{ marginTop: -6 }}>
-        Foto und Bewertung erscheinen auf der Buchungsseite neben der Auswahl. Änderungen sind nach spätestens einer halben Minute online.
+        Foto, Bewertung und Kontaktdaten erscheinen auf der Website. Änderungen sind nach spätestens einer halben Minute online.
       </p>
       {notice && <p className="alert alert--ok" role="status">{notice}</p>}
       {error && <p className="alert" role="alert">{error}</p>}
@@ -114,6 +122,32 @@ export default function AdminShop({ auth, shop }) {
               </div>
             </section>
 
+            <form className="shop-admin__box" onSubmit={saveContact}>
+              <h2 className="shop-admin__h">Kontakt & Social Media</h2>
+              <p className="shop-admin__hint">Steht unten auf der Website. Leere Felder werden nicht angezeigt.</p>
+              <div className="form__row">
+                <div className="field">
+                  <label htmlFor="c-ig">Instagram</label>
+                  <input id="c-ig" value={contact.instagram} onChange={setC('instagram')} placeholder="@mrartist.barbershop" autoComplete="off" />
+                </div>
+                <div className="field">
+                  <label htmlFor="c-wa">WhatsApp-Nummer</label>
+                  <input id="c-wa" type="tel" inputMode="tel" value={contact.whatsapp} onChange={setC('whatsapp')} placeholder="0660 123 45 67" />
+                </div>
+              </div>
+              <div className="form__row">
+                <div className="field">
+                  <label htmlFor="c-mail">E-Mail</label>
+                  <input id="c-mail" type="email" value={contact.email} onChange={setC('email')} placeholder="hallo@mrartist.at" />
+                </div>
+                <div className="field">
+                  <label htmlFor="c-tel">Telefon <em>(optional)</em></label>
+                  <input id="c-tel" type="tel" inputMode="tel" value={contact.phone} onChange={setC('phone')} placeholder="01 234 56 78" />
+                </div>
+              </div>
+              <div className="shop-admin__actions"><button className="btn" disabled={busy}>Kontakt speichern</button></div>
+            </form>
+
             <form className="shop-admin__box" onSubmit={saveRating}>
               <h2 className="shop-admin__h">Bewertung</h2>
               <p className="shop-admin__hint">Zum Beispiel aus Google übernehmen. Feld leer lassen, wenn keine Bewertung angezeigt werden soll.</p>
@@ -127,7 +161,7 @@ export default function AdminShop({ auth, shop }) {
                   <input id="reviews" inputMode="numeric" value={count} onChange={(e) => setCount(e.target.value)} placeholder="127" />
                 </div>
               </div>
-              <div className="shop-admin__actions"><button className="btn" disabled={busy}>Speichern</button></div>
+              <div className="shop-admin__actions"><button className="btn" disabled={busy}>Bewertung speichern</button></div>
             </form>
           </div>
         </div>
