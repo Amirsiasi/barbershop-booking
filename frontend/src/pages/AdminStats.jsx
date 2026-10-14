@@ -11,11 +11,11 @@ import { barberColor } from './AdminCalendar.jsx'
  */
 
 const UNITS = [['week', 'Wochen', 'Woche'], ['month', 'Monate', 'Monat'], ['year', 'Jahre', 'Jahr']]
-// single-series charts use the shop's own green and brass, so they never look like a barber's colour;
+// single-series charts are black and grey like the rest of the site, so they never look like a barber's colour;
 // the sources get their own checked hues (violet / magenta / amber)
 const SOURCE = { ONLINE: ['Online gebucht', '#6250d6'], WHATSAPP: ['WhatsApp', '#d55181'], ADMIN: ['Selbst eingetragen', '#e08a10'] }
-const REVENUE = '#2b5446'
-const COUNT = '#a8792c'
+const REVENUE = '#000000'
+const COUNT = '#8c8c8c'
 
 const MONTHS = ['Jän', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 const MONTHS_LONG = ['Jänner', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']

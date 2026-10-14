@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { duration, euro } from '../lib/time.js'
-import Hero from '../components/Hero.jsx'
+import ScrollHero from '../components/ScrollHero.jsx'
 import ShopInfo, { Footer } from '../components/ShopInfo.jsx'
 import { ShopBadge } from './BookingFlow.jsx'
 
@@ -10,7 +10,7 @@ export default function BookingPage({ shop }) {
   if (!shop) return <Loading />
   return (
     <>
-      <Hero shop={shop} />
+      <ScrollHero shop={shop} />
       <PriceList shop={shop} />
       <ShopInfo shop={shop} />
       <Footer shop={shop} />
