@@ -49,7 +49,7 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/admin/barbers/**", "/api/admin/staff/**",
-                                "/api/admin/services/**", "/api/admin/chat/**", "/api/admin/shop/**").hasRole("OWNER")
+                                "/api/admin/services/**", "/api/admin/chat/**", "/api/admin/shop/**", "/api/admin/stats/**").hasRole("OWNER")
                         .requestMatchers("/api/admin/**").hasAnyRole("OWNER", "BARBER")
                         .anyRequest().permitAll())
                 // 401 as JSON and WITHOUT the WWW-Authenticate header, so the browser shows our login form, not its popup

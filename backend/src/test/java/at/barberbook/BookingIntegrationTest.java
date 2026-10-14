@@ -741,4 +741,36 @@ class BookingIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.appointments.length()").value(2));
     }
+
+    // ---- statistics ------------------------------------------------------------------------------
+
+    @Test
+    void statistics_per_week_month_and_barber() throws Exception {
+        bookOnline(sami, 10, "0660 7000001");
+        long second = bookOnline(reza, 11, "0660 7000002");
+        bookOnline(reza, 12, "0660 7000003");
+        jdbc.update("update appointment set status = 'CANCELLED' where id = ?", second);
+
+        mvc.perform(get("/api/admin/stats").param("unit", "week").with(httpBasic("admin", "test-secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.buckets.length()").value(12))
+                .andExpect(jsonPath("$.buckets[11].start").value("2030-01-07"))
+                .andExpect(jsonPath("$.buckets[11].appointments").value(2))
+                .andExpect(jsonPath("$.buckets[11].revenueCents").value(5600))
+                .andExpect(jsonPath("$.buckets[11].cancelled").value(1))
+                .andExpect(jsonPath("$.totals.newCustomers").value(2))
+                .andExpect(jsonPath("$.totals.averageCents").value(2800))
+                .andExpect(jsonPath("$.previous.appointments").value(0))
+                .andExpect(jsonPath("$.services[0].name").value("Schneiden & Föhnen"));
+
+        mvc.perform(get("/api/admin/stats").param("unit", "month").param("barberId", String.valueOf(sami))
+                        .with(httpBasic("admin", "test-secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.buckets[11].start").value("2030-01-01"))
+                .andExpect(jsonPath("$.totals.appointments").value(1))
+                .andExpect(jsonPath("$.barbers.length()").value(1));
+
+        createLogin(sami, "sami", "start1234", "BARBER", true);
+        mvc.perform(get("/api/admin/stats").with(httpBasic("sami", "start1234"))).andExpect(status().isForbidden());
+    }
 }
